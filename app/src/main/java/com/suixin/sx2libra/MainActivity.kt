@@ -52,8 +52,7 @@ class MainActivity : AppCompatActivity() {
                 if (viewModel.uiState.value.selectedTab != MainRootTab.POSTS) {
                     viewModel.onRootTabSelected(MainRootTab.POSTS)
                 } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
+                    moveTaskToBack(true)
                 }
             }
         })
