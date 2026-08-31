@@ -1,5 +1,6 @@
 package com.suixin.sx2libra.web
 
+import com.suixin.sx2libra.model.AuthContract
 import com.suixin.sx2libra.model.MediaUrlPolicy
 import org.json.JSONObject
 import java.net.URI
@@ -15,7 +16,9 @@ enum class NativeAction(val wireName: String) {
     PICK_AND_UPLOAD_IMAGES("pick_and_upload_images"),
     RETRY_IMAGE_UPLOAD("retry_image_upload"),
     SHARE_POST("share_post"),
-    OPEN_EXTERNAL("open_external");
+    OPEN_EXTERNAL("open_external"),
+    USER_AVATAR("user_avatar"),
+    USER_NAME("user_name");
 
     companion object {
         fun fromWireName(value: String?): NativeAction? = entries.firstOrNull { it.wireName == value }
@@ -48,10 +51,12 @@ sealed class BridgePayload {
         val previewVttUrl: String?
     ) : BridgePayload()
 
-    data class PickAndUploadImages(val uploadTicket: String) : BridgePayload()
+    data object PickAndUploadImages : BridgePayload()
     data class RetryImageUpload(val clientId: String) : BridgePayload()
     data class SharePost(val url: String, val title: String?) : BridgePayload()
     data class OpenExternal(val url: String) : BridgePayload()
+    data class UserAvatar(val url: String) : BridgePayload()
+    data class UserName(val username: String) : BridgePayload()
 }
 
 data class BridgeRequest(
@@ -108,7 +113,6 @@ object BridgeProtocol {
     const val MAX_PAYLOAD_FIELDS = 12
     const val MAX_REQUEST_ID_LENGTH = 64
     const val MAX_TITLE_LENGTH = 160
-    const val MAX_TICKET_LENGTH = 2_048
     const val MAX_CLIENT_ID_LENGTH = 64
 
     private const val EXPECTED_ORIGIN = "https://2libra.com"
@@ -204,11 +208,9 @@ object BridgeProtocol {
             }
             NativeAction.PICK_AND_UPLOAD_IMAGES -> {
                 if (!hasUserGesture || !isAllowedUploadPage(currentUrl) ||
-                    !payload.onlyKeys("uploadTicket")
+                    !payload.onlyKeys()
                 ) return null
-                payload.stringField("uploadTicket")
-                    ?.takeIf { it.length in 1..MAX_TICKET_LENGTH && it.none(Char::isWhitespace) }
-                    ?.let(BridgePayload::PickAndUploadImages)
+                BridgePayload.PickAndUploadImages
             }
             NativeAction.RETRY_IMAGE_UPLOAD -> {
                 if (!hasUserGesture || !isAllowedUploadPage(currentUrl) ||
@@ -228,6 +230,17 @@ object BridgeProtocol {
             NativeAction.OPEN_EXTERNAL -> {
                 if (!payload.onlyKeys("url")) return null
                 payload.stringField("url")?.takeIf(::isAllowedExternalUrl)?.let(BridgePayload::OpenExternal)
+            }
+            NativeAction.USER_AVATAR -> {
+                if (!payload.onlyKeys("url")) return null
+                payload.stringField("url")?.takeIf(::isAllowedAvatarUrl)?.let(BridgePayload::UserAvatar)
+            }
+            NativeAction.USER_NAME -> {
+                if (!payload.onlyKeys("username")) return null
+                payload.stringField("username")
+                    ?.trim()
+                    ?.takeIf(AuthContract::isValidUsername)
+                    ?.let(BridgePayload::UserName)
             }
         }
     }
@@ -282,6 +295,14 @@ object BridgeProtocol {
             uri.host.equals(MediaUrlPolicy.MEDIA_HOST, ignoreCase = true)
         ) return false
         return isSafePath(uri.rawPath.orEmpty())
+    }
+
+    private fun isAllowedAvatarUrl(rawUrl: String): Boolean {
+        val uri = parseHttps(rawUrl) ?: return false
+        val hostAllowed = uri.host.equals(SITE_HOST, ignoreCase = true) ||
+            uri.host.equals(MediaUrlPolicy.MEDIA_HOST, ignoreCase = true)
+        val path = uri.rawPath ?: return false
+        return hostAllowed && path.lowercase(Locale.US).contains("/avatars/") && isSafePath(path)
     }
 
     private fun parseHttps(rawUrl: String): URI? {

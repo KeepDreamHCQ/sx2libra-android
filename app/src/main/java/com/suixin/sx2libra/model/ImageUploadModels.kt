@@ -56,38 +56,6 @@ data class SelectedImage(
     }
 }
 
-/**
- * Server-issued, short-lived permission to use the 2Libra upload proxy.
- * The opaque value must stay in memory and must never be logged or persisted.
- */
-data class UploadTicket(
-    val opaqueValue: String,
-    val expiresAtEpochMillis: Long,
-    val maxBytesPerFile: Long,
-    val maxFiles: Int,
-    val allowedMimeTypes: Set<String> = ImageMimeTypes.allowed
-) {
-    fun isUsable(nowEpochMillis: Long = System.currentTimeMillis()): Boolean =
-        opaqueValue.length in 1..2_048 &&
-            opaqueValue.none { it.isWhitespace() || it.isISOControl() } &&
-        expiresAtEpochMillis > nowEpochMillis &&
-            maxBytesPerFile > 0L &&
-            maxFiles > 0 &&
-            allowedMimeTypes.mapNotNull(ImageMimeTypes::normalize).toSet().isNotEmpty()
-
-    fun effectiveMaxBytes(): Long =
-        minOf(maxBytesPerFile, ImageUploadLimits.MAX_SAFE_FILE_BYTES)
-
-    fun effectiveMaxFiles(): Int = minOf(maxFiles, ImageUploadLimits.MAX_FILES)
-
-    fun allows(mimeType: String, bytes: Long): Boolean {
-        val normalized = ImageMimeTypes.normalize(mimeType) ?: return false
-        val ticketMimes = allowedMimeTypes.mapNotNull(ImageMimeTypes::normalize).toSet()
-        val maxBytes = minOf(effectiveMaxBytes(), ImageUploadLimits.maxBytesForMime(normalized))
-        return normalized in ticketMimes && bytes in 1..maxBytes
-    }
-}
-
 object ImageUploadLimits {
     const val MAX_FILES: Int = 9
     const val MAX_CONCURRENT_UPLOADS: Int = 3
@@ -114,7 +82,6 @@ enum class UploadErrorCode {
     USER_CANCELLED,
     INVALID_IMAGE,
     FILE_TOO_LARGE,
-    TICKET_EXPIRED,
     UPLOAD_REJECTED,
     NETWORK_ERROR,
     PAGE_GONE

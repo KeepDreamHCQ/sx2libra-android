@@ -26,9 +26,35 @@
         style="@style/Widget.Sx2libra.IconButton"
         android:contentDescription="@string/menu_settings_description"
         android:src="@drawable/ic_settings"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/user_avatar"
         app:layout_constraintTop_toTopOf="@id/post_tabs"
         app:layout_constraintBottom_toBottomOf="@id/post_tabs" />
+
+    <FrameLayout
+        android:id="@+id/user_avatar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginEnd="4dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:contentDescription="@string/user_avatar_description"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/post_tabs"
+        app:layout_constraintBottom_toBottomOf="@id/post_tabs">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/user_avatar_image"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_user_avatar_frame"
+            android:clipToOutline="true"
+            android:contentDescription="@string/user_avatar_description"
+            android:padding="2dp"
+            android:scaleType="centerCrop" />
+    </FrameLayout>
 
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/post_pager"

@@ -11,6 +11,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
+import androidx.core.widget.doAfterTextChanged
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -21,6 +22,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.suixin.sx2libra.LibraApplication
 import com.suixin.sx2libra.R
+import com.suixin.sx2libra.model.ImageHost
 import com.suixin.sx2libra.ui.system.applySystemBarInsets
 import com.suixin.sx2libra.ui.system.enableImmersiveSystemBars
 import kotlinx.coroutines.launch
@@ -31,6 +33,9 @@ class MenuSettingsActivity : AppCompatActivity() {
     }
 
     private lateinit var adapter: MenuSettingsAdapter
+    private var routePickerDialog: androidx.appcompat.app.AlertDialog? = null
+    private var imageHostDialog: androidx.appcompat.app.AlertDialog? = null
+    private var routeOptionAdapter: MenuRouteOptionAdapter? = null
     private var lastPendingDeleteRequest: String? = null
     private var lastError: MenuSettingsError? = null
 
@@ -46,6 +51,10 @@ class MenuSettingsActivity : AppCompatActivity() {
         adapter = MenuSettingsAdapter(onDelete = { viewModel.requestDelete(it.id) })
         list.layoutManager = LinearLayoutManager(this)
         list.adapter = adapter
+
+        findViewById<View>(R.id.image_host_setting).setOnClickListener {
+            showImageHostDialog()
+        }
 
         val touchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
             ItemTouchHelper.UP or ItemTouchHelper.DOWN,
@@ -72,7 +81,7 @@ class MenuSettingsActivity : AppCompatActivity() {
         touchHelper.attachToRecyclerView(list)
         adapter.onDragHandleDown = { holder -> touchHelper.startDrag(holder) }
 
-        findViewById<View>(R.id.menu_add).setOnClickListener { showAddMenuDialog() }
+        findViewById<View>(R.id.menu_add).setOnClickListener { showRouteSelectionDialog() }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = finishWithResult()
@@ -92,6 +101,11 @@ class MenuSettingsActivity : AppCompatActivity() {
 
     private fun render(state: MenuSettingsUiState) {
         if (adapter.currentMenus != state.menus) adapter.submitList(state.menus)
+        findViewById<TextView>(R.id.image_host_value).text = state.selectedImageHost.displayName
+        routeOptionAdapter?.submitRoutes(
+            this,
+            state.availableRoutes,
+        )
         val pending = state.pendingDelete
         if (pending != null && pending.requestId != lastPendingDeleteRequest) {
             lastPendingDeleteRequest = pending.requestId
@@ -114,6 +128,45 @@ class MenuSettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun showRouteSelectionDialog() {
+        if (routePickerDialog?.isShowing == true) return
+        val content = LayoutInflater.from(this)
+            .inflate(R.layout.dialog_select_menu_route, null)
+        val searchInput = content.findViewById<EditText>(R.id.menu_route_search_input)
+        val routeList = content.findViewById<RecyclerView>(R.id.menu_route_list).apply {
+            layoutManager = LinearLayoutManager(this@MenuSettingsActivity)
+        }
+        val optionAdapter = MenuRouteOptionAdapter { route ->
+            routePickerDialog?.dismiss()
+            if (route == null) showAddMenuDialog()
+            else viewModel.addMenu(route.name, route.path)
+        }
+        routeOptionAdapter = optionAdapter
+        routeList.adapter = optionAdapter
+        searchInput.doAfterTextChanged { text ->
+            optionAdapter.setQuery(this, text?.toString().orEmpty())
+        }
+        val currentState = viewModel.uiState.value
+        optionAdapter.submitRoutes(
+            this,
+            currentState.availableRoutes,
+        )
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.ThemeOverlay_Sx2libra_MaterialAlertDialog)
+            .setTitle(R.string.menu_route_select_title)
+            .setView(content)
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        routePickerDialog = dialog
+        dialog.setOnDismissListener {
+            if (routePickerDialog === dialog) {
+                routePickerDialog = null
+                routeOptionAdapter = null
+            }
+        }
+        dialog.show()
+    }
+
     private fun showAddMenuDialog() {
         val content = LayoutInflater.from(this).inflate(R.layout.dialog_add_forum_menu, null)
         val nameInput = content.findViewById<EditText>(R.id.menu_name_input).apply {
@@ -130,6 +183,28 @@ class MenuSettingsActivity : AppCompatActivity() {
                 viewModel.addMenu(nameInput.text.toString(), pathInput.text.toString())
             }
             .show()
+    }
+
+    private fun showImageHostDialog() {
+        if (imageHostDialog?.isShowing == true) return
+        val hosts = ImageHost.entries
+        val checked = hosts.indexOf(viewModel.uiState.value.selectedImageHost)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.ThemeOverlay_Sx2libra_MaterialAlertDialog)
+            .setTitle(R.string.image_host_dialog_title)
+            .setSingleChoiceItems(
+                hosts.map(ImageHost::displayName).toTypedArray(),
+                checked,
+            ) { dialogInterface, which ->
+                hosts.getOrNull(which)?.let(viewModel::selectImageHost)
+                dialogInterface.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        imageHostDialog = dialog
+        dialog.setOnDismissListener {
+            if (imageHostDialog === dialog) imageHostDialog = null
+        }
+        dialog.show()
     }
 
     private fun finishWithResult() {

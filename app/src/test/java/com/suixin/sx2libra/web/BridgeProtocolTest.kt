@@ -54,25 +54,31 @@ class BridgeProtocolTest {
     @Test
     fun uploadRequiresNativeGestureAndStrictPayload() {
         val noGesture = BridgeProtocol.parse(
-            message("pick_and_upload_images", "{\"uploadTicket\":\"short-ticket\"}"),
+            message("pick_and_upload_images", "{}"),
             source.copy(hasUserGesture = false)
         )
         assertEquals(BridgeErrorCode.USER_GESTURE_REQUIRED, (noGesture as BridgeParseResult.Rejected).error)
 
-        val invalidTicket = parse(
+        val accepted = parse(
             "pick_and_upload_images",
-            "{\"uploadTicket\":\"ticket with spaces\"}"
+            "{}"
         )
-        assertTrue(invalidTicket is BridgeParseResult.Rejected)
+        assertTrue(accepted is BridgeParseResult.Accepted)
 
         val detail = BridgeProtocol.parse(
-            message("pick_and_upload_images", "{\"uploadTicket\":\"short-ticket\"}"),
+            message("pick_and_upload_images", "{}"),
             source.copy(currentUrl = "https://2libra.com/post/android/abc123"),
         )
         assertTrue(detail is BridgeParseResult.Accepted)
 
+        val ticketField = parse(
+            "pick_and_upload_images",
+            "{\"uploadTicket\":\"ignored\"}"
+        )
+        assertEquals(BridgeErrorCode.INVALID_PAYLOAD, (ticketField as BridgeParseResult.Rejected).error)
+
         val wrongPage = BridgeProtocol.parse(
-            message("pick_and_upload_images", "{\"uploadTicket\":\"short-ticket\"}"),
+            message("pick_and_upload_images", "{}"),
             source.copy(currentUrl = "https://2libra.com/notifications")
         )
         assertEquals(BridgeErrorCode.INVALID_PAYLOAD, (wrongPage as BridgeParseResult.Rejected).error)
@@ -117,6 +123,44 @@ class BridgeProtocolTest {
 
         val external = parse("open_external", "{\"url\":\"http://example.test/\"}")
         assertFalse(external is BridgeParseResult.Accepted)
+    }
+
+    @Test
+    fun mobileUserAvatarAcceptsOnlyAvatarPathOnTrustedHost() {
+        val accepted = parse(
+            "user_avatar",
+            "{\"url\":\"https://r2.2libra.com/cdn-cgi/image/width=256/avatars/user.png?t=1\"}",
+        )
+        assertTrue(accepted is BridgeParseResult.Accepted)
+        assertTrue((accepted as BridgeParseResult.Accepted).request.payload is BridgePayload.UserAvatar)
+
+        val wrongPath = parse(
+            "user_avatar",
+            "{\"url\":\"https://r2.2libra.com/site/logo.png\"}",
+        )
+        assertFalse(wrongPath is BridgeParseResult.Accepted)
+
+        val wrongHost = parse(
+            "user_avatar",
+            "{\"url\":\"https://example.test/avatars/user.png\"}",
+        )
+        assertFalse(wrongHost is BridgeParseResult.Accepted)
+    }
+
+    @Test
+    fun mobileUserNameAcceptsSafeUsernameAndRejectsPathInjection() {
+        val accepted = parse(
+            "user_name",
+            "{\"username\":\"suixin\"}",
+        )
+        assertTrue(accepted is BridgeParseResult.Accepted)
+        assertTrue((accepted as BridgeParseResult.Accepted).request.payload is BridgePayload.UserName)
+
+        val pathInjection = parse(
+            "user_name",
+            "{\"username\":\"../admin\"}",
+        )
+        assertFalse(pathInjection is BridgeParseResult.Accepted)
     }
 
     @Test

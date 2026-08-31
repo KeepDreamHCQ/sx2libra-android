@@ -11,6 +11,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.suixin.sx2libra.data.repository.UserNameStore
 import com.suixin.sx2libra.model.AuthContract
 import com.suixin.sx2libra.model.ProtectedRootTab
 import com.suixin.sx2libra.ui.main.MainRootTab
@@ -59,7 +60,16 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect(::render)
+                launch {
+                    viewModel.uiState.collect(::render)
+                }
+                launch {
+                    UserNameStore.username.collect {
+                        if (viewModel.uiState.value.selectedTab == MainRootTab.PROFILE) {
+                            render(viewModel.uiState.value)
+                        }
+                    }
+                }
             }
         }
     }
@@ -70,6 +80,9 @@ class MainActivity : AppCompatActivity() {
             rendering = true
             bottomNavigation.selectedItemId = checkedId
             rendering = false
+        }
+        if (state.selectedTab == MainRootTab.PROFILE && UserNameStore.username.value == null) {
+            return
         }
         showRoot(state.selectedTab)
     }
@@ -92,7 +105,7 @@ class MainActivity : AppCompatActivity() {
             AuthContract.urlFor(ProtectedRootTab.NOTIFICATIONS),
         )
         MainRootTab.PROFILE -> SinglePageWebFragment.newInstance(
-            AuthContract.urlFor(ProtectedRootTab.PROFILE),
+            AuthContract.profileUrl(requireNotNull(UserNameStore.username.value)),
         )
     }
 }

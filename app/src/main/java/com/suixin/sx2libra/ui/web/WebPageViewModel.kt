@@ -136,6 +136,14 @@ open class WebPageViewModel(
     /** Handles a POST/form redirect observed after the WebView committed it. */
     fun onPageCommitted(url: String?) {
         val route = routePolicy.classify(url)
+        if (
+            route.isSitePage &&
+            routePolicy.isAllowedInlineProfileNavigation(normalizedInitialUrl, route.url)
+        ) {
+            lastCommittedUrl = route.url
+            _uiState.value = _uiState.value.copy(currentUrl = route.url)
+            return
+        }
         if (route.isValid && navigationDestination(route) == lastHandledNavigationUrl) {
             if (route.isSitePage) {
                 lastCommittedUrl = route.url

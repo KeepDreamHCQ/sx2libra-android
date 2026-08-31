@@ -40,12 +40,8 @@ data class SessionCookieConfig(
     }
 
     companion object {
-        /**
-         * Replace this default with the server-confirmed name in AppContainer.
-         * Keeping a default makes platform adapters usable before DI is wired,
-         * while all reads still use exact-name matching.
-         */
-        const val DEFAULT_SESSION_COOKIE_NAME: String = "session"
+        /** The exact session cookie set by 2Libra after authentication. */
+        const val DEFAULT_SESSION_COOKIE_NAME: String = "access_token"
     }
 }
 
@@ -56,7 +52,9 @@ object AuthContract {
     const val SITE_HOME_URL: String = "$SITE_ORIGIN/"
     const val LOGIN_URL: String = "$SITE_ORIGIN/auth/login"
     const val NOTIFICATIONS_URL: String = "$SITE_ORIGIN/notifications"
+    /** Legacy settings route retained for callers that do not have a user yet. */
     const val PROFILE_URL: String = "$SITE_ORIGIN/user/setting/profile"
+    const val MAX_USERNAME_LENGTH: Int = 64
 
     const val EXTRA_INITIAL_URL: String =
         "com.suixin.sx2libra.auth.extra.INITIAL_URL"
@@ -66,8 +64,19 @@ object AuthContract {
         "com.suixin.sx2libra.auth.extra.LOGIN_RESULT"
     const val LOGIN_RESULT_SUCCESS: String = "success"
 
-    fun urlFor(tab: ProtectedRootTab): String = when (tab) {
+    fun profileUrl(username: String): String {
+        require(isValidUsername(username)) { "username is not a valid 2Libra path segment" }
+        return "$SITE_ORIGIN/user/$username/about"
+    }
+
+    fun isValidUsername(username: String): Boolean =
+        username.length in 1..MAX_USERNAME_LENGTH &&
+            username != "." &&
+            username != ".." &&
+            username.all { it.isLetterOrDigit() || it == '-' || it == '_' || it == '.' || it == '~' }
+
+    fun urlFor(tab: ProtectedRootTab, username: String? = null): String = when (tab) {
         ProtectedRootTab.NOTIFICATIONS -> NOTIFICATIONS_URL
-        ProtectedRootTab.PROFILE -> PROFILE_URL
+        ProtectedRootTab.PROFILE -> username?.let(::profileUrl) ?: PROFILE_URL
     }
 }

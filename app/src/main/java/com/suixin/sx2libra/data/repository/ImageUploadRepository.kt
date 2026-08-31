@@ -3,7 +3,6 @@ package com.suixin.sx2libra.data.repository
 import com.suixin.sx2libra.data.remote.ImageUploadRemoteDataSource
 import com.suixin.sx2libra.data.remote.UploadCall
 import com.suixin.sx2libra.data.remote.UploadCallback
-import com.suixin.sx2libra.model.ImageMimeTypes
 import com.suixin.sx2libra.model.ImageUploadEvent
 import com.suixin.sx2libra.model.ImageUploadLimits
 import com.suixin.sx2libra.model.SelectedImage
@@ -11,7 +10,6 @@ import com.suixin.sx2libra.model.UploadErrorCode
 import com.suixin.sx2libra.model.UploadProgress
 import com.suixin.sx2libra.model.UploadTaskSnapshot
 import com.suixin.sx2libra.model.UploadTaskStatus
-import com.suixin.sx2libra.model.UploadTicket
 import com.suixin.sx2libra.model.MediaUrlPolicy
 import com.suixin.sx2libra.model.newUploadClientId
 import java.io.InputStream
@@ -71,12 +69,11 @@ class ImageUploadRepository(
 ) {
     fun startBatch(
         requestId: String,
-        ticket: UploadTicket,
         images: List<SelectedImage>,
         observer: ImageUploadObserver
     ): UploadBatchHandle {
         require(requestId.length in 1..128)
-        val batch = UploadBatch(requestId, ticket, images, observer)
+        val batch = UploadBatch(requestId, images, observer)
         batch.start()
         return UploadBatchHandle(batch)
     }
@@ -87,7 +84,6 @@ class ImageUploadRepository(
 
     private inner class UploadBatch(
         private val requestId: String,
-        private val ticket: UploadTicket,
         images: List<SelectedImage>,
         private val observer: ImageUploadObserver
     ) : UploadBatchController {
@@ -100,8 +96,9 @@ class ImageUploadRepository(
 
         init {
             // The first nine values are the only ones eligible for this batch;
-            // this prevents an untrusted H5 payload from growing the queue.
-            images.take(ticket.effectiveMaxFiles()).forEachIndexed { index, image ->
+            // the native picker currently supplies one, while this queue remains
+            // bounded for future native batch selection.
+            images.take(ImageUploadLimits.MAX_FILES).forEachIndexed { index, image ->
                 val clientId = newUploadClientId()
                 tasks[clientId] = UploadTask(clientId, image.copy(selectionIndex = index))
             }
@@ -135,7 +132,8 @@ class ImageUploadRepository(
                             requestId,
                             task.clientId,
                             error,
-                            retryable = error != UploadErrorCode.TICKET_EXPIRED
+                            retryable = error != UploadErrorCode.INVALID_IMAGE &&
+                                error != UploadErrorCode.FILE_TOO_LARGE
                         )
                     }
                 }
@@ -184,8 +182,8 @@ class ImageUploadRepository(
                 if (cancelled) return false
                 val found = tasks[clientId] ?: return false
                 if (found.state != UploadTaskStatus.FAILED ||
-                    found.error == UploadErrorCode.TICKET_EXPIRED ||
-                    !ticket.isUsable()
+                    found.error == UploadErrorCode.INVALID_IMAGE ||
+                    found.error == UploadErrorCode.FILE_TOO_LARGE
                 ) return false
                 found.error = null
                 found.state = UploadTaskStatus.QUEUED
@@ -240,7 +238,6 @@ class ImageUploadRepository(
                 emit(ImageUploadEvent.Started(requestId, task.clientId))
                 body = bodyProvider.open(task.image)
                 val call = remote.upload(
-                    ticket,
                     task.clientId,
                     task.image,
                     body,
@@ -263,7 +260,8 @@ class ImageUploadRepository(
                             completeFailure(
                                 task,
                                 error,
-                                retryable = error != UploadErrorCode.TICKET_EXPIRED &&
+                                retryable = error != UploadErrorCode.INVALID_IMAGE &&
+                                    error != UploadErrorCode.FILE_TOO_LARGE &&
                                     error != UploadErrorCode.USER_CANCELLED
                             )
                         }
@@ -323,7 +321,7 @@ class ImageUploadRepository(
             }
             if (shouldEmit) {
                 val title = safeDisplayName(task.image.displayName)
-                emit(ImageUploadEvent.Completed(requestId, task.clientId, "[$title]($url)"))
+                emit(ImageUploadEvent.Completed(requestId, task.clientId, "![$title]($url)"))
                 pump()
                 maybeFinish()
             }
@@ -367,7 +365,6 @@ class ImageUploadRepository(
         }
 
         private fun validationError(image: SelectedImage): UploadErrorCode? {
-            if (!ticket.isUsable()) return UploadErrorCode.TICKET_EXPIRED
             if (!image.isStructurallyValid()) {
                 return if (image.normalizedMimeType != null && image.bytes > ImageUploadLimits.maxBytesForMime(image.normalizedMimeType)) {
                     UploadErrorCode.FILE_TOO_LARGE
@@ -375,10 +372,6 @@ class ImageUploadRepository(
                     UploadErrorCode.INVALID_IMAGE
                 }
             }
-            if (image.bytes > ticket.effectiveMaxBytes()) return UploadErrorCode.FILE_TOO_LARGE
-            if (image.normalizedMimeType == null ||
-                image.normalizedMimeType !in ticket.allowedMimeTypes.mapNotNull(ImageMimeTypes::normalize).toSet()
-            ) return UploadErrorCode.INVALID_IMAGE
             return null
         }
 

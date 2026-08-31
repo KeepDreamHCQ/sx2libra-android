@@ -1,11 +1,32 @@
 package com.suixin.sx2libra.data.platform
 
+import com.suixin.sx2libra.model.SessionCookieConfig
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SessionCookieParserTest {
     private val name = "2libra_session"
+
+    @Test
+    fun defaultConfigurationRecognizesThe2LibraSessionCookie() {
+        val config = SessionCookieConfig()
+
+        assertEquals("access_token", config.cookieName)
+        assertTrue(
+            SessionCookieParser.hasNonEmptyExactCookie(
+                "access_token=opaque",
+                config.cookieName,
+            ),
+        )
+        assertFalse(
+            SessionCookieParser.hasNonEmptyExactCookie(
+                "session=opaque",
+                config.cookieName,
+            ),
+        )
+    }
 
     @Test
     fun matchesOnlyTheExactNonEmptyCookieName() {

@@ -20,6 +20,50 @@
             android:layout_weight="1"
             android:text="@string/menu_settings_title"
             android:textAppearance="@style/TextAppearance.Sx2libra.ToolbarTitle" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/image_host_setting"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="56dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_forum_menu_item"
+        android:foreground="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <TextView
+            android:id="@+id/image_host_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/image_host_title"
+            android:textAppearance="@style/TextAppearance.Sx2libra.Body" />
+
+        <TextView
+            android:id="@+id/image_host_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.Sx2libra.Secondary" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_forum_menu_item"
+        android:paddingStart="16dp"
+        android:paddingEnd="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Tab源"
+            android:textAppearance="@style/TextAppearance.Sx2libra.ToolbarTitle" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/menu_add"

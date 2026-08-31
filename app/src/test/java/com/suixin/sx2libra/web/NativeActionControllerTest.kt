@@ -29,7 +29,7 @@ class NativeActionControllerTest {
     fun bridgeDoesNotAcceptPayloadGestureWithoutNativeGesture() {
         val requestId = "123e4567-e89b-42d3-a456-426614174000"
         val raw = """
-            {"version":1,"requestId":"$requestId","action":"pick_and_upload_images","payload":{"uploadTicket":"ticket","userGesture":true}}
+            {"version":1,"requestId":"$requestId","action":"pick_and_upload_images","payload":{}}
         """.trimIndent()
         val result = BridgeProtocol.parse(
             raw,

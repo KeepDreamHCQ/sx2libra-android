@@ -10,7 +10,6 @@ import com.suixin.sx2libra.data.repository.ImageUploadRepository
 import com.suixin.sx2libra.model.ImageUploadEvent
 import com.suixin.sx2libra.model.SelectedImage
 import com.suixin.sx2libra.model.UploadErrorCode
-import com.suixin.sx2libra.model.UploadTicket
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,7 +50,6 @@ class ImageUploadRepositoryTest {
         val finished = CountDownLatch(1)
         val handle = repository.startBatch(
             requestId = "request",
-            ticket = ticket(),
             images = images,
             observer = ImageUploadObserver {
                 events += it
@@ -64,7 +62,7 @@ class ImageUploadRepositoryTest {
         assertEquals(9, events.filterIsInstance<ImageUploadEvent.Completed>().size)
         assertTrue(
             events.filterIsInstance<ImageUploadEvent.Completed>().all {
-                it.markdown.startsWith("[image-") && it.markdown.contains("](https://r2.2libra.com/i/")
+                it.markdown.startsWith("![image-") && it.markdown.contains("](https://tikolu.net/i/")
             }
         )
         assertEquals(9, handle.snapshots().count { it.status.name == "UPLOADED" })
@@ -79,7 +77,6 @@ class ImageUploadRepositoryTest {
         val completed = CountDownLatch(1)
         val handle = repository.startBatch(
             requestId = "retry-request",
-            ticket = ticket(),
             images = listOf(image(0)),
             observer = ImageUploadObserver {
                 events += it
@@ -109,7 +106,6 @@ class ImageUploadRepositoryTest {
         val started = CountDownLatch(1)
         val handle = repository.startBatch(
             requestId = "cancel-request",
-            ticket = ticket(),
             images = (0 until 6).map(::image),
             observer = ImageUploadObserver {
                 events += it
@@ -136,13 +132,6 @@ class ImageUploadRepositoryTest {
         selectionIndex = index
     )
 
-    private fun ticket() = UploadTicket(
-        opaqueValue = "opaque-ticket",
-        expiresAtEpochMillis = System.currentTimeMillis() + 60_000,
-        maxBytesPerFile = 1024,
-        maxFiles = 9
-    )
-
     private fun snapshot(events: List<ImageUploadEvent>): List<ImageUploadEvent> =
         synchronized(events) { events.toList() }
 
@@ -154,7 +143,6 @@ class ImageUploadRepositoryTest {
         private val attempts = AtomicInteger(0)
 
         override fun upload(
-            ticket: UploadTicket,
             clientId: String,
             image: SelectedImage,
             body: InputStream,
@@ -172,7 +160,7 @@ class ImageUploadRepositoryTest {
                         ImageUploadResponse(
                             clientId = clientId,
                             uploadId = "upload-$clientId",
-                            url = "https://r2.2libra.com/i/$clientId.png",
+                            url = "https://tikolu.net/i/$clientId.png",
                             mimeType = "image/png",
                             bytes = image.bytes
                         )

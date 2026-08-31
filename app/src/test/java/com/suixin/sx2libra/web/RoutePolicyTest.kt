@@ -22,6 +22,14 @@ class RoutePolicyTest {
             policy.normalize("https://2libra.com/post/android/abc?commentId=9#reply"),
         )
         assertEquals(WebRouteKind.LOGIN, policy.classify("https://2libra.com/auth/login").kind)
+        assertEquals(
+            WebRouteKind.PROFILE,
+            policy.classify("https://2libra.com/user/suixin/about").kind,
+        )
+        assertEquals(
+            "https://2libra.com/user/suixin/about",
+            com.suixin.sx2libra.model.AuthContract.profileUrl("suixin"),
+        )
     }
 
     @Test
@@ -70,6 +78,31 @@ class RoutePolicyTest {
             policy.isAllowedSamePageRedirect(
                 "https://2libra.com/",
                 "https://2libra.com/post/latest",
+            ),
+        )
+    }
+
+    @Test
+    fun keepsTheFiveProfileTabsInTheSameWebView() {
+        val initial = "https://2libra.com/user/suixin/about"
+        listOf("about", "post", "comment", "favorites", "history").forEach { tab ->
+            assertTrue(
+                policy.isAllowedInlineProfileNavigation(
+                    initial,
+                    "https://2libra.com/user/suixin/$tab",
+                ),
+            )
+        }
+        assertFalse(
+            policy.isAllowedInlineProfileNavigation(
+                initial,
+                "https://2libra.com/user/another-user/post",
+            ),
+        )
+        assertFalse(
+            policy.isAllowedInlineProfileNavigation(
+                initial,
+                "https://2libra.com/post/android/abc",
             ),
         )
     }

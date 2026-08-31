@@ -28,7 +28,7 @@ class NativeActionRouterTest {
             ) = true
         }
         val uploads = object : ImageUploadActionDelegate, RetryableImageUploadActionDelegate {
-            override fun pickAndUploadImages(requestId: String, uploadTicket: String) = true
+            override fun pickAndUploadImages(requestId: String) = true
             override fun retryImageUpload(requestId: String, clientId: String): Boolean {
                 delegated = requestId to clientId
                 return true
@@ -74,7 +74,7 @@ class NativeActionRouterTest {
             ) = true
         }
         val uploads = object : ImageUploadActionDelegate {
-            override fun pickAndUploadImages(requestId: String, uploadTicket: String) = true
+            override fun pickAndUploadImages(requestId: String) = true
         }
         val router = NativeActionRouter(
             navigation = navigation,

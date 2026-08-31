@@ -9,7 +9,11 @@ import android.view.MotionEvent
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import android.widget.Toast
 import androidx.webkit.JavaScriptReplyProxy
+import com.suixin.sx2libra.R
+import com.suixin.sx2libra.data.repository.UserAvatarStore
+import com.suixin.sx2libra.data.repository.UserNameStore
 import com.suixin.sx2libra.model.ImageUploadEvent
 import com.suixin.sx2libra.model.MediaUrlPolicy
 import com.suixin.sx2libra.ui.media.MediaPreviewActivity
@@ -92,13 +96,12 @@ object NativeActionControllerRegistry {
 /**
  * Narrow page upload boundary implemented by the media worker.
  *
- * The opaque ticket is accepted only after [BridgeProtocol] validation. Events
- * are value-only and are delivered through a page-scoped WebMessage channel.
+ * Events are value-only and are delivered through a page-scoped WebMessage
+ * channel. Provider selection and upload authorization stay native.
  */
 interface PageUploadController {
     fun start(
         requestId: String,
-        uploadTicket: String,
         onEvent: (ImageUploadEvent) -> Unit,
     ): Boolean
 
@@ -179,7 +182,6 @@ class PostImageFileChooser(
 object RejectingPageUploadController : PageUploadController {
     override fun start(
         requestId: String,
-        uploadTicket: String,
         onEvent: (ImageUploadEvent) -> Unit,
     ): Boolean = false
 
@@ -212,7 +214,8 @@ class DefaultNativeActionController(
     private fun acceptsImageUpload(): Boolean =
         page == NativeActionPage.POST_COMPOSER || page == NativeActionPage.POST_DETAIL
 
-    private val delegate = object : NativeActionDelegate, RetryableImageUploadActionDelegate {
+    private val delegate = object : NativeActionDelegate, RetryableImageUploadActionDelegate,
+        UserAvatarActionDelegate, UserNameActionDelegate {
         override fun openPage(requestId: String, url: String): Boolean {
             if (!active.get() || !trustedGesture.peek()) return false
             viewModel.onNavigationRequested(url, isRedirect = false, hasUserGesture = true)
@@ -244,6 +247,16 @@ class DefaultNativeActionController(
             if (!active.get() || !trustedGesture.peek()) return false
             viewModel.onNavigationRequested(url, isRedirect = false, hasUserGesture = true)
             return true
+        }
+
+        override fun updateUserAvatar(requestId: String, url: String): Boolean {
+            if (!active.get()) return false
+            UserAvatarStore.update(url)
+            return true
+        }
+
+        override fun updateUserName(requestId: String, username: String): Boolean {
+            return active.get() && UserNameStore.update(username)
         }
 
         override fun previewImages(requestId: String, urls: List<String>, initialIndex: Int): Boolean {
@@ -290,7 +303,7 @@ class DefaultNativeActionController(
             }.getOrDefault(false)
         }
 
-        override fun pickAndUploadImages(requestId: String, uploadTicket: String): Boolean {
+        override fun pickAndUploadImages(requestId: String): Boolean {
             if (!active.get() || !acceptsImageUpload()) return false
             // BridgeProtocol only marks the source as trusted after the
             // controller's native touch window passes. Consume it here so the
@@ -301,7 +314,7 @@ class DefaultNativeActionController(
                 activeUploadRequestId = requestId
             }
             val started = runCatching {
-                uploadController.start(requestId, uploadTicket) { event ->
+                uploadController.start(requestId) { event ->
                     emitUploadEvent(event)
                 }
             }.getOrDefault(false)
@@ -337,6 +350,8 @@ class DefaultNativeActionController(
         navigation = delegate,
         media = delegate,
         uploads = delegate,
+        userAvatar = delegate,
+        userName = delegate,
         requireUserGestureForNavigation = true,
     )
 
@@ -426,6 +441,17 @@ class DefaultNativeActionController(
         mainHandler.post {
             if (!active.get()) return@post
             val channel = channels[requestId] ?: return@post
+            when (event) {
+                is ImageUploadEvent.Completed ->
+                    Toast.makeText(activity, R.string.image_upload_succeeded, Toast.LENGTH_SHORT).show()
+                is ImageUploadEvent.Failed ->
+                    Toast.makeText(
+                        activity,
+                        activity.getString(R.string.image_upload_failed, event.error.name),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                else -> Unit
+            }
             channel.post(BridgeEventEncoder.encode(event))
             if (event is ImageUploadEvent.BatchFinished || event is ImageUploadEvent.BatchCancelled) {
                 synchronized(this@DefaultNativeActionController) {

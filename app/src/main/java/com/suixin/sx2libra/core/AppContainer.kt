@@ -2,9 +2,11 @@ package com.suixin.sx2libra.core
 
 import android.content.Context
 import com.suixin.sx2libra.data.local.ForumMenuLocalDataSource
+import com.suixin.sx2libra.data.local.ImageHostLocalDataSource
 import com.suixin.sx2libra.data.platform.CookieManagerWebCookieDataSource
 import com.suixin.sx2libra.data.repository.DefaultForumMenuRepository
 import com.suixin.sx2libra.data.repository.ForumMenuRepository
+import com.suixin.sx2libra.data.repository.ImageHostRepository
 import com.suixin.sx2libra.data.repository.WebSessionRepository
 
 /**
@@ -21,6 +23,8 @@ class AppContainer(
 
     val forumMenuDataSource = ForumMenuLocalDataSource()
     val forumMenuRepository: ForumMenuRepository = DefaultForumMenuRepository(forumMenuDataSource)
+
+    val imageHostRepository = ImageHostRepository(ImageHostLocalDataSource())
 
     val viewModelFactory: LibraViewModelFactory by lazy {
         LibraViewModelFactory(this)

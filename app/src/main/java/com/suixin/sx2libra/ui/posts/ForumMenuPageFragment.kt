@@ -115,6 +115,30 @@ class ForumMenuPageFragment : Fragment() {
         super.onDestroyView()
     }
 
+    fun toggleCurrentUserMenu() {
+        webHost?.webView()?.evaluateJavascript(
+            """
+            (function() {
+                var image = document.querySelector(
+                    'div.navbar-end > div.relative > [role="button"] img[src*="/avatars/"]'
+                );
+                var trigger = image && image.closest('[role="button"]');
+                if (!trigger) return false;
+                trigger.focus();
+                trigger.click();
+                window.setTimeout(function() {
+                    var bridge = window.LibraNativeBridge;
+                    if (bridge && typeof bridge.alignUserMenu === 'function') {
+                        bridge.alignUserMenu();
+                    }
+                }, 0);
+                return true;
+            })();
+            """.trimIndent(),
+            null,
+        )
+    }
+
     private fun handleAction(action: WebPageAction) {
         val result = when (action) {
             is WebPageAction.OpenPage -> PageNavigator().navigate(requireContext(), action.route)

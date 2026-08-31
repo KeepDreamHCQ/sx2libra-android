@@ -61,6 +61,12 @@ class RoutePolicy(
             path == "/post/latest" -> WebRoute(WebRouteKind.POST_LIST, canonical)
             path == "/notifications" -> WebRoute(WebRouteKind.NOTIFICATIONS, canonical)
             path == "/user/setting/profile" -> WebRoute(WebRouteKind.PROFILE, canonical)
+            segments.size == 3 && segments[0] == "user" && segments[2] == "about" &&
+                AuthContract.isValidUsername(segments[1]) -> WebRoute(
+                kind = WebRouteKind.PROFILE,
+                url = canonical,
+                username = segments[1],
+            )
             path == "/auth/login" -> WebRoute(WebRouteKind.LOGIN, canonical)
             path == "/post/create" -> WebRoute(WebRouteKind.CREATE_POST, canonical)
             segments.size == 3 && segments[0] == "post" -> WebRoute(
@@ -102,6 +108,16 @@ class RoutePolicy(
 
     fun isPostDetailUrl(rawUrl: String?): Boolean =
         classify(rawUrl).kind == WebRouteKind.POST_DETAIL
+
+    /**
+     * Keeps the tabs on one user's profile in the current WebView. Other
+     * same-origin pages still follow the normal Activity navigation policy.
+     */
+    fun isAllowedInlineProfileNavigation(initialUrl: String?, targetUrl: String?): Boolean {
+        val initialProfile = profileTab(initialUrl) ?: return false
+        val targetProfile = profileTab(targetUrl) ?: return false
+        return initialProfile.first == targetProfile.first
+    }
 
     /** The top-level routes that host post-composer image editors. */
     fun isPostComposerUrl(rawUrl: String?): Boolean {
@@ -161,6 +177,20 @@ class RoutePolicy(
         } else {
             null
         }
+    }
+
+    private fun profileTab(rawUrl: String?): Pair<String, String>? {
+        val parsed = parseSite(rawUrl) ?: return null
+        val segments = parsed.decodedSegments
+        if (
+            segments.size != 3 ||
+            segments[0] != "user" ||
+            !AuthContract.isValidUsername(segments[1]) ||
+            segments[2] !in INLINE_PROFILE_TABS
+        ) {
+            return null
+        }
+        return segments[1] to segments[2]
     }
 
     private fun parse(rawUrl: String): ParsedUrl? {
@@ -277,5 +307,6 @@ class RoutePolicy(
         const val MAX_URL_LENGTH: Int = 8_192
 
         private val LOGIN_PROVIDER_HOSTS = setOf("accounts.google.com")
+        private val INLINE_PROFILE_TABS = setOf("about", "post", "comment", "favorites", "history")
     }
 }

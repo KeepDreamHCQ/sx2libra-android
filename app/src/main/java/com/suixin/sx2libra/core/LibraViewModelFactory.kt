@@ -25,7 +25,11 @@ class LibraViewModelFactory(
             modelClass.isAssignableFrom(PostsViewModel::class.java) ->
                 PostsViewModel(container.forumMenuRepository, savedStateHandle) as T
             modelClass.isAssignableFrom(MenuSettingsViewModel::class.java) ->
-                MenuSettingsViewModel(container.forumMenuRepository, savedStateHandle) as T
+                MenuSettingsViewModel(
+                    container.forumMenuRepository,
+                    savedStateHandle,
+                    container.imageHostRepository,
+                ) as T
             else -> throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")
         }
     }
@@ -39,7 +43,11 @@ class LibraViewModelFactory(
             modelClass.isAssignableFrom(PostsViewModel::class.java) ->
                 PostsViewModel(container.forumMenuRepository, savedStateHandle) as T
             modelClass.isAssignableFrom(MenuSettingsViewModel::class.java) ->
-                MenuSettingsViewModel(container.forumMenuRepository, savedStateHandle) as T
+                MenuSettingsViewModel(
+                    container.forumMenuRepository,
+                    savedStateHandle,
+                    container.imageHostRepository,
+                ) as T
             else -> throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")
         }
     }

@@ -6,6 +6,7 @@ import com.suixin.sx2libra.ui.web.WebPageViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -74,6 +75,18 @@ class WebPageViewModelTest {
         assertNotNull(action)
         assertTrue(action is WebPageAction.OpenPage)
         assertTrue((action as WebPageAction.OpenPage).replaceCurrent)
+    }
+
+    @Test
+    fun committedProfileTabsDoNotCreateAnotherActivityAction() {
+        val viewModel = WebPageViewModel("https://2libra.com/user/suixin/about")
+
+        listOf("post", "comment", "favorites", "history").forEach { tab ->
+            val target = "https://2libra.com/user/suixin/$tab"
+            viewModel.onPageCommitted(target)
+            assertNull(viewModel.uiState.value.pendingAction)
+            assertEquals(target, viewModel.uiState.value.currentUrl)
+        }
     }
 
     @Test

@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -12,9 +13,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.widget.ViewPager2
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.google.android.material.tabs.TabLayoutMediator
 import com.suixin.sx2libra.LibraApplication
 import com.suixin.sx2libra.R
+import com.suixin.sx2libra.data.repository.UserAvatarStore
+import com.suixin.sx2libra.model.MediaUrlPolicy
 import com.suixin.sx2libra.ui.menu.MenuSettingsActivity
 import kotlinx.coroutines.launch
 
@@ -65,9 +70,23 @@ class PostsFragment : Fragment() {
         view.findViewById<View>(R.id.menu_settings).setOnClickListener {
             settingsLauncher.launch(Intent(requireContext(), MenuSettingsActivity::class.java))
         }
+        val avatarButton = view.findViewById<View>(R.id.user_avatar)
+        val avatarImage = view.findViewById<ImageView>(R.id.user_avatar_image)
+        avatarButton.setOnClickListener {
+            childFragmentManager.fragments
+                .asSequence()
+                .filterIsInstance<ForumMenuPageFragment>()
+                .firstOrNull { it.isResumed }
+                ?.toggleCurrentUserMenu()
+        }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    UserAvatarStore.avatarUrl.collect { url ->
+                        renderAvatar(url, avatarButton, avatarImage)
+                    }
+                }
                 viewModel.uiState.collect(::render)
             }
         }
@@ -85,6 +104,17 @@ class PostsFragment : Fragment() {
         pageChangeCallback = null
         pager.adapter = null
         super.onDestroyView()
+    }
+
+    private fun renderAvatar(url: String?, button: View, image: ImageView) {
+        val safeUrl = url?.takeIf(MediaUrlPolicy::isAllowedImageUrl)
+        button.visibility = if (safeUrl == null) View.GONE else View.VISIBLE
+        button.isEnabled = safeUrl != null
+        Glide.with(image)
+            .load(safeUrl)
+            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+            .circleCrop()
+            .into(image)
     }
 
     private fun render(state: PostsUiState) {

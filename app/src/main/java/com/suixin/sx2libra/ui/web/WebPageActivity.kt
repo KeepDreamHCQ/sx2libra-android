@@ -31,8 +31,8 @@ import com.suixin.sx2libra.ui.system.enableImmersiveSystemBars
 import kotlinx.coroutines.launch
 
 /**
- * Hosts one validated ordinary 2Libra page.  Every child business navigation
- * becomes a new Activity action; the WebView only receives its own initial URL.
+ * Hosts one validated ordinary 2Libra page. Profile tabs may stay in this
+ * WebView; other child business navigation becomes a new Activity action.
  */
 open class WebPageActivity : FragmentActivity() {
     protected val routePolicy = RoutePolicy()

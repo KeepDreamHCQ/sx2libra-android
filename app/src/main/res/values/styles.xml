@@ -5,6 +5,7 @@
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
         <item name="android:fontFeatureSettings">kern</item>
     </style>
 
@@ -49,8 +50,8 @@
         <item name="itemTextColor">@color/bottom_navigation_item_colors</item>
         <item name="itemBackground">@drawable/bg_bottom_navigation_item</item>
         <item name="itemRippleColor">@color/bottom_navigation_ripple_colors</item>
-        <item name="itemPaddingTop">6dp</item>
-        <item name="itemPaddingBottom">4dp</item>
+        <item name="itemPaddingTop">12dp</item>
+        <item name="itemPaddingBottom">12dp</item>
         <item name="itemHorizontalTranslationEnabled">false</item>
         <item name="elevation">0dp</item>
     </style>

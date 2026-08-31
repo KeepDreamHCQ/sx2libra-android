@@ -19,6 +19,8 @@ class LibraApplication : Application(), WebSessionRepositoryOwner {
         super.onCreate()
         MMKV.initialize(this)
         appContainer = AppContainer(applicationContext)
-        NativeActionControllerRegistry.factory = MediaNativeActionControllerFactory()
+        NativeActionControllerRegistry.factory = MediaNativeActionControllerFactory(
+            appContainer.imageHostRepository,
+        )
     }
 }

@@ -1,8 +1,8 @@
-/* 2Libra native bridge. This script emits typed requests or delegates to a
- * page-owned compatibility input; it never reads cookies, files, or uploads
- * bytes. After a native upload completes, it only writes the returned Markdown
- * into the editor that initiated the request. Native code still treats every
- * field as untrusted and validates origin/frame/route again. */
+/* 2Libra native bridge. This script emits typed requests and keeps only a
+ * page-scoped compatibility callback; it never reads cookies, files, or
+ * uploads bytes. After a native upload completes, it only writes the returned
+ * Markdown into the editor that initiated the request. Native code still
+ * treats every field as untrusted and validates origin/frame/route again. */
 (function () {
   'use strict';
 
@@ -11,10 +11,18 @@
   var MEDIA_ORIGIN = 'https://r2.2libra.com';
   var MAX_URL_LENGTH = 4096;
   var MAX_PREVIEW_ITEMS = 50;
+  var MOBILE_LAYOUT_QUERY = '(max-width: 640px)';
+  var POST_NAVBAR_STYLE_ID = 'libra-post-navbar-style';
+  var POST_PAGE_CLASS = 'libra-post-page';
+  var POST_LIST_PAGE_CLASS = 'libra-post-list-page';
+  var POST_LIST_HEADER_CLASS = 'libra-post-list-header-hidden';
+  var INLINE_PROFILE_TABS = ['about', 'post', 'comment', 'favorites', 'history'];
   var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   var uploadEventListeners = [];
   var uploadEditorTargets = Object.create(null);
   var UPLOAD_TARGET_TTL_MILLIS = 5 * 60 * 1000;
+  var lastUserAvatarUrl = null;
+  var lastUserName = null;
 
   function uuid() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -74,7 +82,7 @@
     input.dispatchEvent(event);
   }
 
-  function setEditorValue(input, value) {
+  function setEditorValue(input, value, notifyChange) {
     var prototype = window.HTMLTextAreaElement && window.HTMLTextAreaElement.prototype;
     var descriptor = prototype && Object.getOwnPropertyDescriptor(prototype, 'value');
     if (descriptor && descriptor.set) {
@@ -83,7 +91,7 @@
       input.value = value;
     }
     dispatchEditorEvent(input, 'input');
-    dispatchEditorEvent(input, 'change');
+    if (notifyChange !== false) dispatchEditorEvent(input, 'change');
   }
 
   function insertEditorText(editor, text) {
@@ -112,10 +120,137 @@
     return true;
   }
 
+  function isAttached(node) {
+    return !!node && !!document.documentElement && document.documentElement.contains(node);
+  }
+
+  function editorForUploadTarget(target, marker) {
+    if (marker) {
+      var inputs = document.querySelectorAll('textarea.w-md-editor-text-input, textarea');
+      for (var i = 0; i < inputs.length; i++) {
+        if ((inputs[i].value || '').indexOf(marker) < 0) continue;
+        var markedEditor = inputs[i].closest('.w-md-editor');
+        if (markedEditor) return markedEditor;
+      }
+    }
+
+    if (isAttached(target.editor)) return target.editor;
+
+    var editors = document.querySelectorAll('.w-md-editor');
+    if (typeof target.editorIndex === 'number' &&
+        target.editorIndex >= 0 && target.editorIndex < editors.length) {
+      return editors[target.editorIndex];
+    }
+    return target.editor;
+  }
+
+  function setEditorSelection(input, start) {
+    if (typeof input.setSelectionRange === 'function') {
+      input.setSelectionRange(start, start);
+    }
+  }
+
+  /* React-controlled textareas can render once after the native setter and
+   * restore the previous state.  Retry only while the value is still the
+   * upload value (or empty/marker-only), so a user's subsequent edit wins. */
+  function scheduleCompletedEditorRepair(
+    target,
+    placeholder,
+    beforeValue,
+    expectedValue,
+    markdown,
+    expectedCursor
+  ) {
+    var delays = [0, 50, 160, 400, 1000];
+    var attempt = 0;
+    var repair = function () {
+      var editor = editorForUploadTarget(target, placeholder);
+      var input = editorTextInput(editor);
+      if (!input) {
+        if (attempt < delays.length) {
+          window.setTimeout(repair, delays[attempt++]);
+        }
+        return;
+      }
+
+      var current = input.value || '';
+      if (current === expectedValue ||
+          (current.indexOf(markdown) >= 0 &&
+           (!placeholder || current.indexOf(placeholder) < 0))) return;
+
+      var canRepair = current === '' || current === beforeValue ||
+        (placeholder && current.indexOf(placeholder) >= 0);
+      if (!canRepair) return;
+
+      var next = expectedValue;
+      if (placeholder && current.indexOf(placeholder) >= 0) {
+        next = current.replace(placeholder, markdown);
+      }
+      setEditorValue(input, next, false);
+      setEditorSelection(input, Math.min(expectedCursor, next.length));
+      if (attempt < delays.length) {
+        window.setTimeout(repair, delays[attempt++]);
+      }
+    };
+    window.setTimeout(repair, delays[attempt++]);
+  }
+
+  function scheduleCompletedEditorWrite(target, placeholder, markdown) {
+    var delays = [0, 50, 160, 400, 1000];
+    var attempt = 0;
+    var retry = function () {
+      if (writeCompletedMarkdown(target, placeholder, markdown)) return;
+      if (attempt < delays.length) window.setTimeout(retry, delays[attempt++]);
+    };
+    window.setTimeout(retry, delays[attempt++]);
+  }
+
+  function writeCompletedMarkdown(target, placeholder, markdown) {
+    var editor = editorForUploadTarget(target, placeholder);
+    var input = editorTextInput(editor);
+    if (!input) return false;
+
+    var beforeValue = input.value || '';
+    var index = placeholder ? beforeValue.indexOf(placeholder) : -1;
+    var next;
+    var cursor;
+    if (index >= 0) {
+      next = beforeValue.slice(0, index) + markdown +
+        beforeValue.slice(index + placeholder.length);
+      cursor = index + markdown.length;
+    } else {
+      var start = typeof input.selectionStart === 'number' ? input.selectionStart : beforeValue.length;
+      var end = typeof input.selectionEnd === 'number' ? input.selectionEnd : start;
+      next = beforeValue.slice(0, start) + markdown + beforeValue.slice(end);
+      cursor = start + markdown.length;
+    }
+
+    setEditorValue(input, next);
+    setEditorSelection(input, cursor);
+    scheduleCompletedEditorRepair(
+      target,
+      placeholder,
+      beforeValue,
+      next,
+      markdown,
+      cursor
+    );
+    return true;
+  }
+
   function rememberUploadTarget(requestId, editor) {
     if (!editor) return;
+    var editors = document.querySelectorAll('.w-md-editor');
+    var editorIndex = -1;
+    for (var i = 0; i < editors.length; i++) {
+      if (editors[i] === editor) {
+        editorIndex = i;
+        break;
+      }
+    }
     uploadEditorTargets[requestId] = {
       editor: editor,
+      editorIndex: editorIndex,
       placeholders: Object.create(null),
       cleanupTimer: null
     };
@@ -157,15 +292,16 @@
     if (parsed.event === 'image_upload_selected') {
       if (!isUuid(clientId) || target.placeholders[clientId]) return;
       var marker = '<!-- 2libra-upload:' + clientId + ' -->';
-      if (insertEditorText(target.editor, marker)) target.placeholders[clientId] = marker;
+      var selectedEditor = editorForUploadTarget(target);
+      if (insertEditorText(selectedEditor, marker)) target.placeholders[clientId] = marker;
       return;
     }
 
     if (parsed.event === 'image_upload_completed') {
       if (!isUuid(clientId) || typeof payload.markdown !== 'string' || !payload.markdown) return;
       var placeholder = target.placeholders[clientId];
-      if (!placeholder || !replaceEditorText(target.editor, placeholder, payload.markdown)) {
-        insertEditorText(target.editor, payload.markdown);
+      if (!writeCompletedMarkdown(target, placeholder, payload.markdown)) {
+        scheduleCompletedEditorWrite(target, placeholder, payload.markdown);
       }
       delete target.placeholders[clientId];
       return;
@@ -174,7 +310,13 @@
     if (parsed.event === 'image_upload_failed' || parsed.event === 'image_upload_cancelled') {
       if (isUuid(clientId)) {
         var failedPlaceholder = target.placeholders[clientId];
-        if (failedPlaceholder) replaceEditorText(target.editor, failedPlaceholder, '');
+        if (failedPlaceholder) {
+          replaceEditorText(
+            editorForUploadTarget(target, failedPlaceholder),
+            failedPlaceholder,
+            ''
+          );
+        }
         delete target.placeholders[clientId];
       }
       return;
@@ -182,7 +324,11 @@
 
     if (parsed.event === 'image_upload_batch_cancelled') {
       Object.keys(target.placeholders).forEach(function (id) {
-        replaceEditorText(target.editor, target.placeholders[id], '');
+        replaceEditorText(
+          editorForUploadTarget(target, target.placeholders[id]),
+          target.placeholders[id],
+          ''
+        );
       });
       forgetUploadTarget(parsed.requestId);
       return;
@@ -204,13 +350,16 @@
       var parsed;
       try { parsed = JSON.parse(value); } catch (_) { return; }
       if (!parsed || typeof parsed.event !== 'string') return;
-      handleUploadEvent(parsed);
       uploadEventListeners.slice().forEach(function (listener) {
         try { listener(parsed); } catch (_) {}
       });
       if (typeof window.CustomEvent === 'function') {
         window.dispatchEvent(new CustomEvent('libra-upload-event', { detail: parsed }));
       }
+      /* Let page listeners finish first. The native bridge owns the final
+       * editor write, so a page-side upload listener cannot clear it after a
+       * successful upload event. */
+      handleUploadEvent(parsed);
     });
   }
 
@@ -228,6 +377,186 @@
     if (!url || url.origin !== SITE_ORIGIN) return false;
     var parts = url.pathname.split('/').filter(Boolean);
     return parts.length === 3 && parts[0] === 'post';
+  }
+
+  function isSafeUsername(username) {
+    return typeof username === 'string' && username.length >= 1 && username.length <= 64 &&
+      username !== '.' && username !== '..' && /^[-A-Za-z0-9._~]+$/.test(username);
+  }
+
+  function profileTab(url) {
+    if (!url || url.origin !== SITE_ORIGIN) return null;
+    var parts = url.pathname.replace(/^\/+|\/+$/g, '').split('/');
+    if (parts.length !== 3 || parts[0] !== 'user' || !isSafeUsername(parts[1]) ||
+        INLINE_PROFILE_TABS.indexOf(parts[2]) < 0) return null;
+    return { username: parts[1], tab: parts[2] };
+  }
+
+  function isInlineProfileTabUrl(url) {
+    var current = profileTab(absolute(document.location.href));
+    var target = profileTab(url);
+    return !!(current && target && current.username === target.username);
+  }
+
+  function isPostPage() {
+    if (document.location.origin !== SITE_ORIGIN) return false;
+    var path = document.location.pathname.replace(/\/+$/, '') || '/';
+    return path === '/' || path === '/post' || path.indexOf('/post/') === 0;
+  }
+
+  function isPostListPage() {
+    if (document.location.origin !== SITE_ORIGIN) return false;
+    var path = document.location.pathname.replace(/\/+$/, '') || '/';
+    return path === '/post/hot/today' ||
+      path === '/post/hot/recent' ||
+      path === '/post/latest';
+  }
+
+  function postListHeader(navigationControl) {
+    var ancestor = navigationControl;
+    while (ancestor && ancestor !== document.body) {
+      var classes = ancestor.classList;
+      if (ancestor.tagName === 'DIV' && classes &&
+          classes.contains('px-2') && classes.contains('py-1') &&
+          classes.contains('border-b') &&
+          classes.contains('border-base-content/10') &&
+          classes.contains('flex') && classes.contains('items-center') &&
+          classes.contains('justify-between') && classes.contains('block') &&
+          classes.contains('lg:hidden')) {
+        return ancestor;
+      }
+      ancestor = ancestor.parentElement;
+    }
+    return null;
+  }
+
+  function updatePostListHeaderVisibility() {
+    var root = document.documentElement;
+    if (!root) return;
+    var hidden = isPostListPage();
+    root.classList.toggle(POST_LIST_PAGE_CLASS, hidden);
+    var navigationControls = document.querySelectorAll(
+      'a[href="/post/hot/today"], a[href="/post/hot/recent"], a[href="/post/latest"]'
+    );
+    for (var i = 0; i < navigationControls.length; i++) {
+      var header = postListHeader(navigationControls[i]);
+      if (header) header.classList.toggle(POST_LIST_HEADER_CLASS, hidden);
+    }
+  }
+
+  function updatePostNavbarVisibility() {
+    var root = document.documentElement;
+    if (!root) return;
+    var style = document.getElementById(POST_NAVBAR_STYLE_ID);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = POST_NAVBAR_STYLE_ID;
+      style.textContent =
+        'html.' + POST_PAGE_CLASS + ' .navbar {' +
+        'height: 0 !important; min-height: 0 !important; padding-block: 0 !important;' +
+        'overflow: visible !important;}' +
+        'html.' + POST_PAGE_CLASS + ' .navbar > .navbar-start {' +
+        'display: none !important;}' +
+        'html.' + POST_PAGE_CLASS + ' .navbar > .navbar-end > div.relative > ' +
+        '[role="button"] > * {' +
+        'visibility: hidden !important;}' +
+        'html.' + POST_PAGE_CLASS + ' .navbar > .navbar-end > div.relative > ' +
+        '*:not([role="button"]) {' +
+        'left: auto !important; right: 0 !important;' +
+        'inset-inline-start: auto !important; inset-inline-end: 0 !important;' +
+        'z-index: 50 !important;}' +
+        'html.' + POST_LIST_PAGE_CLASS + ' .' + POST_LIST_HEADER_CLASS + ' {' +
+        'display: none !important; height: 0 !important; min-height: 0 !important;' +
+        'padding: 0 !important; margin: 0 !important; border: 0 !important;' +
+        'overflow: hidden !important;}';
+      (document.head || root).appendChild(style);
+    }
+    root.classList.toggle(POST_PAGE_CLASS, isPostPage());
+    updatePostListHeaderVisibility();
+  }
+
+  function alignOpenUserMenu() {
+    var image = document.querySelector(
+      'div.navbar-end > div.relative > [role="button"] img[src*="/avatars/"]'
+    );
+    var trigger = image && image.closest('[role="button"]');
+    var scope = trigger && trigger.parentElement;
+    if (!scope) return false;
+
+    var candidates = scope.querySelectorAll('*');
+    var menu = null;
+    var largestArea = 0;
+    for (var i = 0; i < candidates.length; i++) {
+      var candidate = candidates[i];
+      if (candidate === trigger || trigger.contains(candidate)) continue;
+      var computed = window.getComputedStyle(candidate);
+      if (computed.position !== 'absolute' && computed.position !== 'fixed') continue;
+      var rect = candidate.getBoundingClientRect();
+      var area = rect.width * rect.height;
+      if (area <= largestArea) continue;
+      largestArea = area;
+      menu = candidate;
+    }
+    if (!menu) return false;
+
+    var menuRect = menu.getBoundingClientRect();
+    menu.style.setProperty('position', 'fixed', 'important');
+    menu.style.setProperty('top', Math.max(0, menuRect.top) + 'px', 'important');
+    menu.style.setProperty('left', 'auto', 'important');
+    menu.style.setProperty('right', '0px', 'important');
+    menu.style.setProperty('inset-inline-start', 'auto', 'important');
+    menu.style.setProperty('inset-inline-end', '0px', 'important');
+    menu.style.setProperty('transform', 'none', 'important');
+    menu.style.setProperty('z-index', '1000', 'important');
+    menu.style.setProperty('max-width', 'calc(100vw - 16px)', 'important');
+    menu.style.setProperty('max-height', 'calc(100vh - 8px)', 'important');
+    menu.style.setProperty('overflow-y', 'auto', 'important');
+    return true;
+  }
+
+  function mobileUserAvatarUrl() {
+    if (!window.matchMedia || !window.matchMedia(MOBILE_LAYOUT_QUERY).matches) return null;
+    var image = document.querySelector(
+      'div.navbar-end > div.relative > [role="button"] img[src*="/avatars/"]'
+    );
+    if (!image) return null;
+    var url = absolute(image.currentSrc || image.src || image.getAttribute('data-src'));
+    if (!url || url.protocol !== 'https:' ||
+        (url.hostname !== 'r2.2libra.com' && url.hostname !== '2libra.com') ||
+        url.port || url.hash || url.pathname.toLowerCase().indexOf('/avatars/') < 0) {
+      return null;
+    }
+    return url.href;
+  }
+
+  function reportUserAvatar() {
+    var url = mobileUserAvatarUrl();
+    if (!url || url === lastUserAvatarUrl) return false;
+    if (!emit('user_avatar', { url: url })) return false;
+    lastUserAvatarUrl = url;
+    return true;
+  }
+
+  function mobileUserName() {
+    if (!window.matchMedia || !window.matchMedia(MOBILE_LAYOUT_QUERY).matches) return null;
+    var image = document.querySelector(
+      'div.navbar-end > div.relative > [role="button"] img[src*="/avatars/"]'
+    );
+    var trigger = image && image.closest('[role="button"]');
+    if (!trigger) return null;
+    var label = trigger.querySelector('div.text-xs');
+    var username = label && (label.textContent || '').trim();
+    if (!username && image.getAttribute) username = (image.getAttribute('alt') || '').trim();
+    if (!isSafeUsername(username)) return null;
+    return username;
+  }
+
+  function reportUserName() {
+    var username = mobileUserName();
+    if (!username || username === lastUserName) return false;
+    if (!emit('user_name', { username: username })) return false;
+    lastUserName = username;
+    return true;
   }
 
   function isImageUrl(url) {
@@ -250,9 +579,37 @@
     return null;
   }
 
+  function isNonContentImage(image) {
+    if (!image || !image.closest) return false;
+
+    /* The bridge listener runs during capture, so editor controls must be
+     * left to the page before the generic image-preview handler sees them. */
+    if (image.closest(
+      '.w-md-editor, button, [role="button"], [role="option"], ' +
+      '[data-emoji], [data-emoticon], [data-emoji-picker]'
+    )) return true;
+
+    var ancestor = image;
+    while (ancestor && ancestor !== document.body) {
+      var marker = [
+        ancestor.id,
+        typeof ancestor.className === 'string' ? ancestor.className : '',
+        ancestor.getAttribute && ancestor.getAttribute('aria-label'),
+        ancestor.getAttribute && ancestor.getAttribute('title')
+      ].join(' ').toLowerCase();
+      if (marker.indexOf('emoji') >= 0 || marker.indexOf('emoticon') >= 0) return true;
+      ancestor = ancestor.parentElement;
+    }
+    return false;
+  }
+
+  function isPreviewableImage(image) {
+    return !!imageUrl(image) && !isNonContentImage(image);
+  }
+
   function imageElements() {
     return Array.prototype.filter.call(document.querySelectorAll('img'), function (image) {
-      return !!imageUrl(image);
+      return isPreviewableImage(image);
     });
   }
 
@@ -311,6 +668,7 @@
     var url = absolute(anchor.href);
     if (!url || event.defaultPrevented) return false;
     if (url.origin === SITE_ORIGIN) {
+      if (isInlineProfileTabUrl(url)) return false;
       var handled = emit(isPostUrl(url) ? 'open_post' : 'open_page', { url: url.href });
       if (!handled) return false;
       event.preventDefault();
@@ -337,7 +695,7 @@
       var target = event.target;
       if (!target || !target.closest) return;
       var image = target.closest('img');
-      if (image && imageUrl(image)) {
+      if (image && isPreviewableImage(image)) {
         onImageClick(event, image);
         return;
       }
@@ -347,34 +705,15 @@
       if (pick) {
         event.preventDefault();
         event.stopPropagation();
-        /* The injected button is an acquisition affordance, not a page
-         * upload action.  Trigger the editor's existing file input directly
-         * so WebView dispatches onShowFileChooser() and the native
-         * PictureSelector flow owns selection, crop, and compression. */
-        if (pick.getAttribute('data-libra-native-picker') === 'true') {
-          var nativeFileInput = fallbackImageInput(pick);
-          if (nativeFileInput) nativeFileInput.click();
-          return;
-        }
-        /* The ticket is intentionally supplied by the page's same-origin
-         * authenticated code and is never persisted by this script. */
-        var ticketOwner = pick.closest('[data-upload-ticket]');
-        var ticket = ticketOwner ? ticketOwner.getAttribute('data-upload-ticket') : null;
         var editor = pick.closest('.w-md-editor');
-        var requestId = ticket ? uuid() : null;
+        var requestId = uuid();
         if (requestId) rememberUploadTarget(requestId, editor);
-        var handled = !!(ticket && requestId && emit(
+        var handled = !!(requestId && emit(
           'pick_and_upload_images',
-          { uploadTicket: ticket },
+          {},
           requestId
         ));
         if (!handled && requestId) forgetUploadTarget(requestId);
-        if (!handled) {
-          /* Page-owned buttons may use the old file-input fallback when the
-           * App upload action is unavailable. */
-          var fileInput = fallbackImageInput(pick);
-          if (fileInput) fileInput.click();
-        }
         return;
       }
       var share = target.closest('[data-libra-share-post]');
@@ -403,31 +742,20 @@
     window.history[method] = function (state, title, url) {
       if (url == null) return original.apply(window.history, arguments);
       var next = absolute(url);
-      if (next && next.origin === SITE_ORIGIN && hasUserActivation()) {
+      if (next && next.origin === SITE_ORIGIN && hasUserActivation() &&
+          !isInlineProfileTabUrl(next)) {
         var handled = emit(isPostUrl(next) ? 'open_post' : 'open_page', { url: next.href });
         if (handled) return undefined;
       }
-      return original.apply(window.history, arguments);
+      var result = original.apply(window.history, arguments);
+      updatePostNavbarVisibility();
+      return result;
     };
   }
 
   interceptHistory('pushState');
   interceptHistory('replaceState');
-
-  function fallbackImageInput(pick) {
-    var editor = pick.closest('.w-md-editor');
-    if (!editor) return null;
-    var scope = editor;
-    while (scope && scope !== document.body) {
-      var inputs = scope.querySelectorAll('input[type="file"]');
-      for (var i = 0; i < inputs.length; i++) {
-        var accept = inputs[i].getAttribute('accept') || '';
-        if (!accept || accept.toLowerCase().indexOf('image') !== -1) return inputs[i];
-      }
-      scope = scope.parentElement;
-    }
-    return null;
-  }
+  window.addEventListener('popstate', updatePostNavbarVisibility);
 
   /* Optional toolbar affordance: add one button to every editor instance.
    * Reply editors are mounted after the initial page load, so this function
@@ -466,12 +794,31 @@
       uploadEventListeners = uploadEventListeners.filter(function (item) { return item !== listener; });
     };
   };
+  publicApi.alignUserMenu = alignOpenUserMenu;
   window.LibraNativeBridge = publicApi;
 
+  updatePostNavbarVisibility();
   wire(document);
   installReplyListener();
   injectPicker();
+  reportUserAvatar();
+  reportUserName();
   if (window.MutationObserver) {
-    new MutationObserver(injectPicker).observe(document.documentElement, { childList: true, subtree: true });
+    new MutationObserver(function () {
+      updatePostNavbarVisibility();
+      injectPicker();
+      reportUserAvatar();
+      reportUserName();
+      alignOpenUserMenu();
+    }).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'aria-expanded']
+    });
   }
+  window.addEventListener('resize', function () {
+    reportUserAvatar();
+    reportUserName();
+  });
 })();

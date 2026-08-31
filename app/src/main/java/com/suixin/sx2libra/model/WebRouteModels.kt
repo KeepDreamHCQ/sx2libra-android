@@ -26,6 +26,7 @@ data class WebRoute(
     val nodeSlug: String? = null,
     val postId: String? = null,
     val reason: String? = null,
+    val username: String? = null,
 ) {
     val isValid: Boolean
         get() = kind != WebRouteKind.INVALID

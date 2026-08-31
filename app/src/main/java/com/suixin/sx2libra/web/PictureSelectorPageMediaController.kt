@@ -5,14 +5,14 @@ import android.net.Uri
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import androidx.fragment.app.FragmentActivity
-import com.suixin.sx2libra.data.remote.HttpImageUploadRemoteDataSource
+import com.suixin.sx2libra.data.remote.ImageUploadRemoteDataSourceFactory
+import com.suixin.sx2libra.data.repository.ImageHostRepository
 import com.suixin.sx2libra.data.repository.ImageBodyProvider
 import com.suixin.sx2libra.data.repository.ImageUploadRepository
 import com.suixin.sx2libra.model.ImageMimeTypes
 import com.suixin.sx2libra.model.ImageUploadEvent
-import com.suixin.sx2libra.model.ImageUploadLimits
+import com.suixin.sx2libra.model.ImageHost
 import com.suixin.sx2libra.model.SelectedImage
-import com.suixin.sx2libra.model.UploadTicket
 import java.io.InputStream
 
 /**
@@ -34,49 +34,49 @@ class PictureSelectorPageUploadController(
         resolver = activity.contentResolver,
     ),
     private val resolver: ContentResolver = activity.contentResolver,
-    private val repository: ImageUploadRepository = ImageUploadRepository(
-        remote = HttpImageUploadRemoteDataSource(),
-        bodyProvider = ImageBodyProvider { image ->
-            openImageBody(resolver, image)
-        },
-    ),
+    private val imageHostProvider: () -> ImageHost = { ImageHost.TIKOLU },
+    private val repositoryFactory: (ImageHost) -> ImageUploadRepository = { host ->
+        ImageUploadRepository(
+            remote = ImageUploadRemoteDataSourceFactory.create(host),
+            bodyProvider = ImageBodyProvider { image ->
+                openImageBody(resolver, image)
+            },
+        )
+    },
 ) : PageUploadController, RetryablePageUploadController {
     private val lock = Any()
     private var active = true
     private var pendingPickerRequestId: String? = null
     private var session: UploadSession? = null
 
-    private class UploadSession(val requestId: String) {
+    private class UploadSession(
+        val requestId: String,
+        val repository: ImageUploadRepository,
+    ) {
         var open = true
         var batch: com.suixin.sx2libra.data.repository.UploadBatchHandle? = null
     }
 
     override fun start(
         requestId: String,
-        uploadTicket: String,
         onEvent: (ImageUploadEvent) -> Unit,
     ): Boolean {
+        var completedRepository: ImageUploadRepository? = null
         val accepted = synchronized(lock) {
             if (!active || pendingPickerRequestId != null || session?.open == true || requestId.isBlank()) {
                 return@synchronized false
             }
+            completedRepository = session?.repository
             pendingPickerRequestId = requestId
             true
         }
         if (!accepted) return false
+        completedRepository?.shutdown()
 
-        val ticket = UploadTicket(
-            opaqueValue = uploadTicket,
-            expiresAtEpochMillis = System.currentTimeMillis() + UPLOAD_TICKET_TTL_MILLIS,
-            maxBytesPerFile = ImageUploadLimits.MAX_PICKER_FILE_BYTES,
-            maxFiles = ImageUploadLimits.MAX_FILES,
-            allowedMimeTypes = ImageMimeTypes.allowed,
-        )
-        picker.launch(ImagePickerMode.MULTIPLE) { result ->
+        picker.launch(ImagePickerMode.SINGLE) { result ->
             when (result) {
                 is ImagePickerResult.Selected -> startBatch(
                     requestId,
-                    ticket,
                     result.images,
                     onEvent,
                 )
@@ -121,19 +121,18 @@ class PictureSelectorPageUploadController(
         }
         if (!shouldCancel) return
         runCatching { picker.cancel() }
-        synchronized(lock) { session?.batch }?.cancel()
-        repository.shutdown()
+        val current = synchronized(lock) { session }
+        current?.batch?.cancel()
+        current?.repository?.shutdown()
     }
 
     /** Releases page-owned repository threads; safe to call repeatedly. */
     fun close() {
         cancel()
-        repository.shutdown()
     }
 
     private fun startBatch(
         requestId: String,
-        ticket: UploadTicket,
         images: List<SelectedImage>,
         onEvent: (ImageUploadEvent) -> Unit,
     ) {
@@ -141,13 +140,25 @@ class PictureSelectorPageUploadController(
             active && pendingPickerRequestId == requestId
         }
         if (!canStart) return
+        // Resolve the host exactly once for this batch. A settings change can
+        // therefore affect the next batch only, never an active one.
+        val host = runCatching { imageHostProvider() }.getOrDefault(ImageHost.TIKOLU)
+        val uploadRepository = runCatching { repositoryFactory(host) }.getOrNull()
+        if (uploadRepository == null) {
+            finishPickerWithoutBatch(requestId, onEvent)
+            return
+        }
         val uploadSession = synchronized(lock) {
             if (!active || pendingPickerRequestId != requestId) return@synchronized null
             pendingPickerRequestId = null
-            UploadSession(requestId).also { session = it }
-        } ?: return
+            UploadSession(requestId, uploadRepository).also { session = it }
+        }
+        if (uploadSession == null) {
+            uploadRepository.shutdown()
+            return
+        }
         val created = runCatching {
-            repository.startBatch(requestId, ticket, images) { event ->
+            uploadRepository.startBatch(requestId, images) { event ->
                 onEvent(event)
                 if (event is ImageUploadEvent.BatchFinished ||
                     event is ImageUploadEvent.BatchCancelled
@@ -164,6 +175,7 @@ class PictureSelectorPageUploadController(
             synchronized(lock) {
                 if (session === uploadSession) session = null
             }
+            uploadRepository.shutdown()
             onEvent(ImageUploadEvent.BatchCancelled(requestId))
             return
         }
@@ -172,6 +184,7 @@ class PictureSelectorPageUploadController(
                 uploadSession.batch = created
             } else {
                 created.cancel()
+                uploadRepository.shutdown()
             }
         }
     }
@@ -189,8 +202,6 @@ class PictureSelectorPageUploadController(
     }
 
     private companion object {
-        const val UPLOAD_TICKET_TTL_MILLIS = 5L * 60L * 1_000L
-
         fun openImageBody(resolver: ContentResolver, image: SelectedImage): InputStream {
             val uri = runCatching { Uri.parse(image.contentUri) }.getOrNull()
                 ?.takeIf { it.scheme.equals("content", ignoreCase = true) }
@@ -277,7 +288,9 @@ class PictureSelectorSingleImageFileChooser(
  * Web Activity.  The host should assign this factory to
  * [NativeActionControllerRegistry.factory] once during Application startup.
  */
-class MediaNativeActionControllerFactory : NativeActionControllerFactory {
+class MediaNativeActionControllerFactory(
+    private val imageHostRepository: ImageHostRepository? = null,
+) : NativeActionControllerFactory {
     override fun create(
         activity: android.app.Activity,
         page: NativeActionPage,
@@ -298,6 +311,9 @@ class MediaNativeActionControllerFactory : NativeActionControllerFactory {
             activity = fragmentActivity,
             picker = picker,
             resolver = activity.contentResolver,
+            imageHostProvider = {
+                imageHostRepository?.selectedHost?.value ?: ImageHost.TIKOLU
+            },
         )
         val chooser = PictureSelectorSingleImageFileChooser(
             picker = picker,

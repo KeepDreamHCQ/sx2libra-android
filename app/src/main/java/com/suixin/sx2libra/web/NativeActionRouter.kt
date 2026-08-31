@@ -26,7 +26,17 @@ interface MediaActionDelegate {
 
 interface ImageUploadActionDelegate {
     /** Starts picker/upload UI and returns false if this page cannot accept it. */
-    fun pickAndUploadImages(requestId: String, uploadTicket: String): Boolean
+    fun pickAndUploadImages(requestId: String): Boolean
+}
+
+/** Receives the current user's avatar URL from the authenticated page shell. */
+interface UserAvatarActionDelegate {
+    fun updateUserAvatar(requestId: String, url: String): Boolean
+}
+
+/** Receives the current user's username from the authenticated page shell. */
+interface UserNameActionDelegate {
+    fun updateUserName(requestId: String, username: String): Boolean
 }
 
 /** Optional value-only retry boundary for a completed upload batch. */
@@ -45,6 +55,8 @@ class NativeActionRouter(
     private val navigation: NavigationActionDelegate,
     private val media: MediaActionDelegate,
     private val uploads: ImageUploadActionDelegate,
+    private val userAvatar: UserAvatarActionDelegate? = null,
+    private val userName: UserNameActionDelegate? = null,
     private val requireUserGestureForNavigation: Boolean = false,
 ) {
     constructor(delegate: NativeActionDelegate) : this(delegate, delegate, delegate)
@@ -79,7 +91,7 @@ class NativeActionRouter(
                         payload.previewVttUrl
                     )
                 is BridgePayload.PickAndUploadImages ->
-                    uploads.pickAndUploadImages(request.requestId, payload.uploadTicket)
+                    uploads.pickAndUploadImages(request.requestId)
                 is BridgePayload.RetryImageUpload ->
                     (uploads as? RetryableImageUploadActionDelegate)
                         ?.retryImageUpload(request.requestId, payload.clientId) == true
@@ -87,6 +99,10 @@ class NativeActionRouter(
                     navigation.sharePost(request.requestId, payload.url, payload.title)
                 is BridgePayload.OpenExternal ->
                     navigation.openExternal(request.requestId, payload.url)
+                is BridgePayload.UserAvatar ->
+                    userAvatar?.updateUserAvatar(request.requestId, payload.url) == true
+                is BridgePayload.UserName ->
+                    userName?.updateUserName(request.requestId, payload.username) == true
             }
             if (handled) BridgeReply.success(request.requestId) else {
                 BridgeReply.failure(request.requestId, BridgeErrorCode.INVALID_PAYLOAD)

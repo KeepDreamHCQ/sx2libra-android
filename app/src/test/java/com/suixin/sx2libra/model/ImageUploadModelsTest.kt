@@ -1,6 +1,7 @@
 package com.suixin.sx2libra.model
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -40,26 +41,13 @@ class ImageUploadModelsTest {
     }
 
     @Test
-    fun uploadTicketDoesNotAllowPayloadsThatCanTrigger413() {
-        val ticket = UploadTicket(
-            opaqueValue = "ticket",
-            expiresAtEpochMillis = System.currentTimeMillis() + 60_000L,
-            maxBytesPerFile = ImageUploadLimits.MAX_SAFE_FILE_BYTES,
-            maxFiles = 1,
-        )
-
-        assertFalse(
-            ticket.allows(
-                ImageMimeTypes.JPEG,
-                ImageUploadLimits.MAX_STATIC_IMAGE_BYTES + 1L,
-            )
-        )
-        assertTrue(
-            ticket.allows(
-                ImageMimeTypes.GIF,
-                ImageUploadLimits.MAX_GIF_BYTES,
-            )
-        )
+    fun imageHostFallsBackToTikoluAndAcceptsOnlyItsHttpsUrls() {
+        assertEquals(ImageHost.TIKOLU, ImageHost.fromStoredKey(null))
+        assertEquals(ImageHost.TIKOLU, ImageHost.fromStoredKey("unknown"))
+        assertTrue(ImageHost.TIKOLU.isAllowedImageUrl("https://tikolu.net/i/abc-123"))
+        assertFalse(ImageHost.TIKOLU.isAllowedImageUrl("http://tikolu.net/i/abc-123"))
+        assertFalse(ImageHost.TIKOLU.isAllowedImageUrl("https://evil.test/i/abc-123"))
+        assertTrue(ImageHost.PHOTO_LILY.isAllowedImageUrl("https://photo.lily.lat/uploads/a.webp"))
     }
 
     private fun image(mimeType: String, bytes: Long) = SelectedImage(

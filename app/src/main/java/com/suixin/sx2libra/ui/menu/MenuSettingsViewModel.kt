@@ -3,10 +3,14 @@ package com.suixin.sx2libra.ui.menu
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.suixin.sx2libra.data.local.SiteRouteCatalog
 import com.suixin.sx2libra.data.repository.ForumMenuError
 import com.suixin.sx2libra.data.repository.ForumMenuRepository
 import com.suixin.sx2libra.data.repository.ForumMenuRepositoryException
+import com.suixin.sx2libra.data.repository.ImageHostRepository
 import com.suixin.sx2libra.model.ForumMenu
+import com.suixin.sx2libra.model.ImageHost
+import com.suixin.sx2libra.model.SiteRoute
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,8 +18,10 @@ import kotlinx.coroutines.launch
 
 class MenuSettingsViewModel(
     private val menuRepository: ForumMenuRepository,
-    private val savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle,
+    private val imageHostRepository: ImageHostRepository,
 ) : ViewModel() {
+    private val siteRoutes: List<SiteRoute> = SiteRouteCatalog.routes
     private val startConfig = menuRepository.currentConfig()
     private val restoredPendingDelete = savedStateHandle.get<String>(KEY_PENDING_DELETE_ID)
         ?.let { id ->
@@ -35,6 +41,8 @@ class MenuSettingsViewModel(
             startRevision = startConfig.revision,
             currentRevision = startConfig.revision,
             pendingDelete = restoredPendingDelete,
+            availableRoutes = filterAvailableRoutes(siteRoutes, startConfig.menus),
+            selectedImageHost = imageHostRepository.selectedHost.value,
             isLoading = false
         )
     )
@@ -51,11 +59,28 @@ class MenuSettingsViewModel(
                 _uiState.value = _uiState.value.copy(
                     menus = config.menus,
                     currentRevision = config.revision,
+                    availableRoutes = filterAvailableRoutes(siteRoutes, config.menus),
                     pendingDelete = pending,
                     isLoading = false,
                     error = null
                 )
             }
+        }
+        viewModelScope.launch {
+            imageHostRepository.selectedHost.collect { host ->
+                _uiState.value = _uiState.value.copy(
+                    selectedImageHost = host,
+                )
+            }
+        }
+    }
+
+    fun selectImageHost(host: ImageHost) {
+        val result = imageHostRepository.select(host)
+        if (result.isSuccess) {
+            _uiState.value = _uiState.value.copy(error = null)
+        } else {
+            setError(MenuSettingsError.STORAGE)
         }
     }
 
@@ -122,6 +147,14 @@ class MenuSettingsViewModel(
 
     private fun setError(error: MenuSettingsError) {
         _uiState.value = _uiState.value.copy(error = error)
+    }
+
+    private fun filterAvailableRoutes(
+        routes: List<SiteRoute>,
+        menus: List<ForumMenu>,
+    ): List<SiteRoute> {
+        val existingPaths = menus.mapTo(HashSet(), ForumMenu::path)
+        return routes.filterNot { it.path in existingPaths }
     }
 
     private fun ForumMenuError.toSettingsError(): MenuSettingsError = when (this) {

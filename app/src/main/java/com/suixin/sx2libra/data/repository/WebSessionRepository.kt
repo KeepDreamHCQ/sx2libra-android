@@ -53,12 +53,16 @@ class WebSessionRepository(
         // Update immediately so protected-root gates cannot race a logout
         // request.  The data source clears the WebView profile afterwards.
         _authState.value = AuthState.LOGGED_OUT
+        UserAvatarStore.clear()
+        UserNameStore.clear()
         cookieDataSource.clearSession()
         cookieDataSource.flush()
     }
 
     override fun markSessionExpired() {
         _authState.value = AuthState.LOGGED_OUT
+        UserAvatarStore.clear()
+        UserNameStore.clear()
     }
 
     /** Called by WebView page callbacks at the authenticated boundary. */

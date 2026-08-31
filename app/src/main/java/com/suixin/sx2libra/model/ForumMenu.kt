@@ -44,7 +44,7 @@ object ForumMenuSpec {
     const val LATEST_ID: String = "default-latest"
 
     fun defaultMenus(): List<ForumMenu> = listOf(
-        ForumMenu(HOME_ID, "2Libra首页", "/"),
+        ForumMenu(HOME_ID, "首页", "/"),
         ForumMenu(TODAY_ID, "今日热议", "/post/hot/today"),
         ForumMenu(RECENT_ID, "近期热议", "/post/hot/recent"),
         ForumMenu(LATEST_ID, "新发表", "/post/latest")

@@ -3,7 +3,7 @@
 本文定义基于 Android WebView 构建 2Libra 客户端的架构、功能接管协议、安全边界、实施顺序与验收标准。论坛移动 H5 继续承担内容展示和业务交互，Android 负责应用外壳、导航、页面分层、图片选择与图床上传、图片预览和 GSYVideoPlayer 视频能力。
 
 > 状态：首版客户端代码已实现；服务端/H5 联调与真机验收待完成
-> 更新日期：2026-08-29
+> 更新日期：2026-08-31
 > 适用工程：`com.suixin.sx2libra`
 
 ## 开始前必须确认的约束
@@ -20,10 +20,10 @@
 - “媒体本地渲染”默认指：媒体在正文中仍由 WebView 展示，点击后进入原生图片预览或视频播放器。
 - 图片继续使用 PhotoView 原生预览；视频统一由 GSYVideoPlayer 播放，不再单独直接集成 Media3 播放器。
 - 工程 `minSdk` 固定为 26。当前本地播放使用已发布且可解析的 GSYVideoPlayer Java 13.1.0；投屏保留可注入 SPI，但官方投屏能力仍未形成可验证的发布 artifact。
-- 发帖选图由 Android 的 PictureSelector 接管，JPEG/PNG 使用 uCrop 裁切后再由 CompressHelper 压缩；首选流程由 Android 上传到 2Libra 自有上传代理并取得图片直链，再由 H5 按正式协议写入编辑器。
-- 图床供应商的密钥、令牌和降级策略只保存在 2Libra 服务端。APK 不内置第三方密钥，不抓取第三方页面 token，也不直接依赖图床网页接口。
+- 发帖选图由 Android 的 PictureSelector 接管，JPEG/PNG 使用 uCrop 裁切后再由 CompressHelper 压缩；GIF/WebP 保持原格式。Android 使用设置中选定的 Tikolu 或 Photo Lily 上传并取得 HTTPS 直链，再由 H5 按正式协议写入编辑器。
+- 首版只调用 Tikolu 和 Photo Lily 的固定 HTTPS 上传接口，不内置第三方密钥、令牌或网页 token，也不把任意 provider URL 交给 H5。
 - 原生能力优先使用 WebView 标准回调；只有标准回调无法表达的行为才使用受限 WebMessage Bridge。
-- 不把论坛 Cookie、长期认证 Token 或 CSRF 信息复制到 SharedPreferences、数据库或 JS Bridge。唯一例外是 H5 传给原生的短时、限用途上传票据；它只存在于内存并只能访问固定上传代理。
+- 不把论坛 Cookie、长期认证 Token、CSRF 信息或上传凭据复制到 SharedPreferences、数据库或 JS Bridge。图床选择单独保存在 `image_host` MMKV 配置中，上传请求不依赖 H5 票据。
 - 本文不包含推送通知、离线发帖、后台上传和帖子正文完全原生化。
 
 ## 快速了解目标体验
@@ -90,11 +90,11 @@
 | 帖子链接使用 `/post/{nodeSlug}/{postId}` | 帖子详情可稳定分类 | `RoutePolicy` 解析 scheme、host 和 path segments |
 | 页面图片可能来自论坛媒体域、代理或帖子中的第三方图床 | 点击图片时统一交给原生预览，不依赖图床格式 | HTTPS URL 校验 + DOM `img` 捕获 |
 | 发帖页有两个标准隐藏图片文件控件 | 可保留网站原上传流程作为兼容降级 | `onShowFileChooser()` 仍支持单图 `content://` 回传 |
-| 文件控件没有 `multiple` | 标准文件回调当前只能单图；图床批量上传不能复用该回调 | 首选流程使用 `pick_and_upload_images` Bridge Action |
+| 文件控件没有 `multiple` | 标准文件回调当前只能单图；它不是首选图片入口 | `pick_and_upload_images` 直接启动原生单图选择 |
 | 产品指定 PictureSelector + uCrop | 选择器和裁切属于同一原生流程 | PictureSelector → uCrop/原图 → `WebPageViewModel` → `ImageUploadRepository` |
 | 用户提供的 Universal Image Uploader 代码为 2Libra 配置 Markdown、逐图占位符、批量队列和 3 路并发 | 可复用交互与队列模型 | 先回填占位符，并发上传，按占位符原顺序替换为图片直链 |
-| 该插件默认依赖第三方网页 token、硬编码 Client ID/Token、可选公共代理及 `postMessage('*')` | 不能原样移植进生产 APK | 使用同源 Bridge、短时上传票据和 2Libra 自有上传代理 |
-| 插件内不同图床限制在 8～100 MB 间变化 | 客户端不能写死某一家图床规则 | 上传票据返回实际限制，客户端再叠加 20 MiB 安全上限 |
+| 该插件默认依赖第三方网页 token、硬编码 Client ID/Token、可选公共代理及 `postMessage('*')` | 不能原样移植进生产 APK | 使用同源 Bridge、固定 provider 工厂和 HTTPS host allowlist |
+| 图床 provider 有不同响应格式 | 客户端不能把任意响应或 URL 直接写入编辑器 | 固定 provider 工厂分别解析 Tikolu/Photo Lily，并只接受对应 HTTPS host |
 | 参考工程 `ShowImgActivity` 使用黑底预览、PhotoView 手势、单击退出和长按保存 | 图片查看器需要复用这套核心交互 | `MediaPreviewActivity` 使用 PhotoView + 底部操作面板 |
 | 参考工程保存时把资源解码为 Bitmap 并统一转成 JPEG | 直接复制会使 GIF/WebP 丢失动画或格式 | 保存时流式写入原始响应，不经过 Bitmap 二次编码 |
 | 产品指定 GSYVideoPlayer 操作和预览视频 | 本地视频能力不再使用独立 Media3 接入 | `VideoPlayerActivity` 承载自定义 `LibraGSYVideoPlayer` |
@@ -159,13 +159,16 @@ flowchart TB
 
   subgraph sources[DataSource / 平台层]
     menu_local[(MMKV MenuDataSource)]
-    forum_remote[2libra.com / 上传代理]
+    image_host_local[(MMKV ImageHostDataSource)]
+    provider_remote[Tikolu / Photo Lily provider]
     cookie_store[(WebView Cookie Store)]
     media_store[(MediaStore / 图片网络)]
   end
 
   menu_repo --> menu_local
-  upload_repo --> forum_remote
+  upload_repo --> provider_remote
+  menu_vm --> image_host_local
+  web_adapter --> image_host_local
   media_repo --> media_store
   session_repo --> cookie_store
 ```
@@ -185,8 +188,8 @@ flowchart TB
 | `WebPageViewModel` | 维护 URL、加载、错误和图片上传任务状态 | 持有 WebView、ValueCallback 或 ReplyProxy |
 | `ForumMenuPagerAdapter` | 用稳定菜单 ID 管理 `ForumMenuPageFragment` | 修改菜单配置 |
 | `ForumMenuPageFragment` | 根据 `WebPageUiState` 创建、恢复和销毁 WebView | 接受任意外站 URL 或持有业务状态 |
-| `MenuSettingsActivity` | 渲染设置状态、显示删除确认框、连接 ItemTouchHelper | 直接修改帖子页 Adapter 或 MMKV |
-| `MenuSettingsViewModel` | 校验新增/删除/排序意图、维护初始快照和 dirty 状态 | 持有 RecyclerView、Dialog 或 Activity Result Launcher |
+| `MenuSettingsActivity` | 渲染设置状态、显示图床单选/删除确认框、连接 ItemTouchHelper | 直接修改帖子页 Adapter 或 MMKV |
+| `MenuSettingsViewModel` | 校验新增/删除/排序意图、维护初始快照和图床选择状态 | 持有 RecyclerView、Dialog 或 Activity Result Launcher |
 | `ForumMenuRepository` | 菜单单一事实来源，输出 Flow 并协调本地配置版本 | 暴露 MMKV API 给 ViewModel |
 | `ForumMenuLocalDataSource` | 使用 MMKV 读写、校验和恢复版本化菜单 JSON | 决定 UI 选中位置 |
 | `PostActivity` / `PostViewModel` | 渲染独立帖子 WebView并维护详情页状态 | 创建额外 TabBar 或持有 WebView 引用 |
@@ -199,7 +202,7 @@ flowchart TB
 | `NativeActionRouter` | 把受校验 Bridge 回调转换为 ViewModel 意图并回写已渲染结果 | 暴露任意 Android API 或承载长期状态 |
 | `PostImagePicker` | 启动 PictureSelector、配置 uCrop、校验选择结果 | 网络上传 |
 | `ImageUploadRepository` | 创建逐图任务、限制并发、调用上传 DataSource并输出进度状态 | 保存图床密钥或操作编辑器 DOM |
-| `ImageUploadRemoteDataSource` | 使用短时票据上传到 2Libra 代理并解析规范化直链 | 直连或抓取第三方图床网页 |
+| `ImageUploadRemoteDataSource` | 按批次 provider 发送 multipart 并解析固定 HTTPS 直链 | 保存凭据、访问任意 host 或抓取第三方图床网页 |
 | `MediaPreviewActivity` / `MediaPreviewViewModel` | 渲染黑底图片预览并维护分页、保存状态 | 在 ViewModel 中解码 Bitmap 或持有 PhotoView |
 | `MediaRepository` / `MediaStoreDataSource` | 校验并流式保存原图，保持真实格式 | 把图片统一转码为 JPEG |
 | `VideoPlayerActivity` / `VideoPlayerViewModel` | 渲染播放器并维护播放、倍速、画幅和投屏状态 | 在 ViewModel 中持有 GSY Player 或 Activity |
@@ -365,7 +368,7 @@ dependencies {
 - AndroidX Lifecycle ViewModel、SavedState 和 `lifecycle-runtime-ktx`，以及 Kotlin Coroutines Android
 - Material Components 的 `BottomNavigationView` 和 `TabLayout`
 - AndroidX Fragment、ViewPager2、RecyclerView 与 `ItemTouchHelper`
-- 支持 multipart、上传进度、取消和 TLS 的 HTTP 客户端；只允许访问 2Libra 上传代理，不引入第三方图床 SDK
+- 支持 multipart、上传进度、取消和 TLS 的 HTTP 客户端；只允许访问固定 Tikolu/Photo Lily endpoint，不引入第三方图床 SDK
 - 支持 GIF 和磁盘缓存的图片加载库，并分别适配 PictureSelector `ImageEngine` 与 uCrop `UCropImageEngine`
 - PhotoView `com.github.chrisbanes:PhotoView:2.3.0`，用于图片双击/双指缩放、拖动与点击事件
 
@@ -740,7 +743,7 @@ override fun shouldOverrideUrlLoading(
 
 推荐布局为黑色 edge-to-edge 根容器、`ViewPager2`、每页一个 `com.github.chrisbanes.photoview.PhotoView`，顶部仅显示可选的 `当前位置/总数`。当前图片使用与 PictureSelector 共用的图片加载库加载，保留正常的内存和磁盘缓存；GIF 以动画 Drawable 展示。
 
-交互规则与参考实现保持一致，并补全多图场景：
+交互规则与参考实现保持一致，并补全动态媒体场景：
 
 - 双指和双击缩放，放大后可拖动查看；缩放到边界后才允许切换上一张或下一张。
 - 单击图片或黑色空白处：底部操作面板已显示时先关闭面板，否则退出预览。
@@ -853,15 +856,15 @@ DLNA `AVTransport:1` 不保证接收设备支持倍速或客户端画幅设置�
 
 - 不把 Imgur Client ID、图床 Token、Secret 或 Bucket 信息写入 APK、资源文件、BuildConfig 或远程日志。
 - 不通过抓取第三方上传页取得临时 token；网页结构和服务条款变化会直接破坏客户端。
-- 不使用 `wsrv.nl`、DuckDuckGo 等公共代理包装用户图片 URL；上传代理应返回 2Libra 认可的 CDN/图床直链。
+- 不使用 `wsrv.nl`、DuckDuckGo 等公共代理包装用户图片 URL；provider adapter 应返回经过固定 host 校验的图床直链。
 - 不使用 `postMessage('*')`，不向任意 frame 发送上传结果；只把本次请求成功后的 Markdown 写入发起按钮所属编辑器，并派发 `input`/`change` 事件。
 - 不把插件的跨站上传历史复制到本地持久化存储；首版只在当前草稿生命周期保存任务状态。
 
-生产基线为：Android 只调用 `https://2libra.com` 下的自有上传代理。代理持有图床配置，可在服务端实现主图床、备用图床、限流、审核和供应商迁移；原生上传流程只把最终 HTTPS 图片地址转换为 Markdown 写回对应编辑器，不向页面单独回传 `url` 字段。附件中的 MJJ.Today 等 provider 适配器只作为服务端实现时的流程参考，不构成客户端依赖。
+生产基线为：Android 在批次开始时读取当前图床设置，使用固定的 provider 工厂调用 Tikolu 或 Photo Lily；原生上传流程只把经过 host allowlist 校验的 HTTPS 图片地址转换为 Markdown 写回对应编辑器，不向页面单独回传 `url` 字段。附件中的 MJJ.Today 等 provider 适配器只作为字段和响应格式参考，不构成客户端依赖。
 
 ### 首选入口与兼容入口
 
-发帖页和帖子详情页的评论编辑器需要新增稳定的 H5 App 协议。用户点击“插入图片”时，H5 通过 `pick_and_upload_images` Action 请求原生选择和上传，而不是触发 `<input type="file">`。这条首选链路支持最多 9 张图片和上传进度；评论回复框和底部评论框也使用同一链路。
+发帖页和帖子详情页的评论编辑器需要新增稳定的 H5 App 协议。用户点击“插入图片”时，H5 通过空 payload 的 `pick_and_upload_images` Action 请求原生选择和上传，而不是触发 `<input type="file">`。首版一次选择一张图片；评论回复框和底部评论框也使用同一链路。
 
 当前页面仍保留以下单选控件：
 
@@ -872,15 +875,13 @@ DLNA `AVTransport:1` 不保证接收设备支持倍速或客户端画幅设置�
   accept="image/jpeg,image/png,image/webp,image/gif">
 ```
 
-`WebChromeClient.onShowFileChooser()` 继续作为兼容入口：当 H5 尚未部署新协议或用户从旧入口选图时，PictureSelector 只返回一个 `content://` URI，由网站原流程上传。由于控件没有 `multiple`，兼容入口不得强行返回多图。两条入口不能为同一次点击同时启动。
+`WebChromeClient.onShowFileChooser()` 继续作为旧 H5 主动请求文件选择时的兼容入口：PictureSelector 只返回一个 `content://` URI，由网站原流程上传。注入的原生图片按钮不读取票据、不点击网页文件控件；两条入口不能为同一次点击同时启动。
 
-若论坛暂时不能改图片按钮，可由 `libra-bridge.js` 在 `app-shell` 模式下向每个 W-MD Editor 工具栏注入一个图片按钮，覆盖发帖编辑器、底部评论编辑器和动态生成的评论回复编辑器。注入按钮直接触发所属编辑器已有的图片文件控件，由 WebView 的 `onShowFileChooser()` 进入原生 PictureSelector → uCrop → CompressHelper 选图流程；页面自有按钮仍优先使用受限 Action。
-`.w-md-editor > div.w-md-editor-toolbar > ul:nth-child(1) > li:last-of-type`
-只能作为集中管理的定位线索，并需用 `MutationObserver` 处理 SPA 重绘。注入按钮的点击只负责调用原生获取图片；选中的 `content://` 文件随后按当前 H5 文件控件的既有上传回调处理，不由脚本自行上传或读取 Cookie。
+若论坛暂时不能改图片按钮，可由 `libra-bridge.js` 在 `app-shell` 模式下向每个 W-MD Editor 工具栏注入一个图片按钮，覆盖发帖编辑器、底部评论编辑器和动态生成的评论回复编辑器。注入按钮只发起空 payload 的 `pick_and_upload_images` Action，由原生 PictureSelector → uCrop → CompressHelper → 固定图床处理；它不会回退到网站自己的隐藏文件控件。`.w-md-editor > div.w-md-editor-toolbar > ul:nth-child(1)` 只能作为集中管理的定位线索，并需用 `MutationObserver` 处理 SPA 重绘。脚本不能自行上传、读取 Cookie 或把本地 URI 回传给 H5。
 
 ### PictureSelector 与 uCrop
 
-首选图床流程使用 `SelectModeConfig.MULTIPLE`，`setMaxSelectNum(9)`，并关闭相机入口；兼容文件回调使用 `SelectModeConfig.SINGLE`。JPEG/PNG 逐张进入 uCrop，自由裁切后再使用 `CompressHelper` 压缩并上传；GIF/WebP 保持原文件，避免动画被转成静态帧。
+首选图床流程使用 `SelectModeConfig.SINGLE`，并关闭相机入口；兼容文件回调也使用 `SelectModeConfig.SINGLE`。JPEG/PNG 进入 uCrop，自由裁切后再使用 `CompressHelper` 压缩并上传；GIF/WebP 保持原文件，避免动画被转成静态帧。
 
 `libraCropEngine` 实现 PictureSelector 的 `CropFileEngine`，使用库提供的输入、输出 URI 和 `requestCode` 启动 uCrop：
 
@@ -901,7 +902,7 @@ override fun onStartCrop(
 选择结果必须遵守以下规则：
 
 - 允许 MIME 仅为 JPEG、PNG、WebP 和 GIF；不能只信扩展名或 PictureSelector 返回值，上传前使用 `ContentResolver` 再校验 MIME、可读性和字节数。
-- 单文件上限为 `min(上传票据的 maxBytesPerFile, MIME 对应的服务端上限)`，静态图片为 6 MiB、GIF 为 10 MiB；原始文件仍受 20 MiB 安全上限保护，批次数量为 `min(票据的 maxFiles, 9)`。
+- 单文件上限为 MIME 对应的客户端上限，静态图片为 6 MiB、GIF 为 10 MiB；原始文件仍受 20 MiB 安全上限保护。
 - JPEG/PNG 完成 uCrop 裁切后使用 `CompressHelper` 做尺寸和质量压缩；JPEG 输出 JPEG，PNG 保留透明通道并输出 PNG。GIF/WebP 保持原文件，避免动画被压成单帧。
 - 裁切文件写入 App `cacheDir` 专用目录，不写公共相册。任务结束后延迟清理，进程启动时按时效清理陈旧文件。
 - 原始 `content://` URI 只在原生进程内部读取，不通过 Bridge 发送给 H5。兼容入口遇到普通路径时才通过 `FileProvider` 转为临时 `content://`，禁止返回 `file://`。
@@ -937,14 +938,15 @@ stateDiagram-v2
 5. 用户取消整个批次、发帖 `WebPageActivity` 被结束，或 POST 落到其他业务路由并关闭来源 Activity 时，取消未完成请求并释放回复通道；打开新的子页面 Activity 不修改发帖 WebView URL，来源 Activity 和 reply channel 仍存活时可继续当前批次。已经上传成功的 URL 可留在草稿中。
 6. 任务属于前台发帖交互，不使用 WorkManager 做后台上传。页面退出后不继续静默上传。
 
-### 2Libra 上传代理协议
+### 固定图床上传协议
 
-论坛服务端需要提供两个 App 专用接口。接口路径是本项目约定，不直接暴露底层图床协议：
+H5 不申请、不生成也不传递上传票据。Bridge 请求只允许空 payload；Android 在批次开始时读取当前图床，并通过 provider 工厂发起以下请求：
 
-1. H5 使用现有登录态和 CSRF 调用 `POST /api/app/image-uploads/ticket`。
-2. H5 在 `pick_and_upload_images` payload 中传入返回的短时 `uploadTicket`。
-3. Android 使用 `Authorization: UploadTicket <opaque-ticket>` 调用 `POST /api/app/image-uploads`，以 multipart 的 `file` 和 `clientId` 上传每张图片。
-4. 上传代理校验票据、文件签名、大小和速率，完成图床上传后返回规范化直链。
+1. Tikolu：`POST https://tikolu.net/i/`，multipart 字段为 `upload=true` 和 `file`。
+2. Photo Lily：`POST https://photo.lily.lat/upload`，multipart 字段为 `file`。
+3. 原生只解析各自约定的成功响应，并校验返回地址为对应 provider 的 HTTPS 图片 URL。
+
+客户端不复制 Imgur、111666、StarDots 等参考 provider 的密钥或 token；上传失败只转换为稳定错误码，不把响应正文、文件路径或本地 URI返回给 H5。
 
 Bridge 请求示例：
 
@@ -953,32 +955,24 @@ Bridge 请求示例：
   "version": 1,
   "requestId": "6b4a29df-8b90-4c74-9ceb-f976554a0e71",
   "action": "pick_and_upload_images",
-  "payload": {
-    "uploadTicket": "opaque-short-lived-ticket"
-  }
+  "payload": {}
 }
 ```
 
-票据必须绑定当前用户、发帖用途、允许 MIME、单文件大小、最多文件数和过期时间；有效期不超过 5 分钟，完成批次或过期后不可复用。票据只保存在内存中，不进入 Cookie Store、磁盘、Bridge 日志或崩溃上报。
-
-上传成功响应约定如下：
+Tikolu 成功响应约定如下：
 
 ```json
 {
-  "code": 0,
-  "data": {
-    "clientId": "2af17b68-5e36-4f52-80e3-f740a9aaf4ac",
-    "uploadId": "img_01K3S6N4J92Q",
-    "url": "https://r2.2libra.com/i/2026/08/example.webp",
-    "mimeType": "image/webp",
-    "bytes": 348221,
-    "width": 1440,
-    "height": 900
-  }
+  "status": "uploaded",
+  "id": "example-id"
 }
 ```
 
-`url` 是原生上传流程使用的最终结果；桥接层会在成功时将它与安全显示名组合成 Markdown，不把独立的 `url` 字段下发给 H5。删除令牌、供应商原始响应、供应商账号和备用图床地址不得下发给 App。若使用主备图床，复制、回源和故障切换由代理完成，客户端仍只处理一个规范 URL。
+Photo Lily 成功响应为包含 `src` 的数组，例如 `[ { "src": "/uploads/example.webp" } ]`。原生把 Tikolu 的 `id` 或 Photo Lily 的 `src` 规范化为真实 HTTPS URL，但不把 provider 原始响应或独立 `url` 字段下发给 H5。
+
+### 图床设置
+
+`MenuSettingsActivity` 在工具栏和菜单列表之间显示“图床源”设置行，选项为 `Tikolu`、`Photo Lily`，默认值为 Tikolu。选择值保存在独立的 `image_host` MMKV 中；缺失或非法值自动修复为 Tikolu。上传批次开始时读取一次当前值并固定 provider，设置变化只影响下一批次。
 
 ### 将 Markdown 写回 H5 编辑器
 
@@ -991,14 +985,14 @@ Bridge 使用同一个 `requestId` 返回事件，成功事件只携带要插入
   "event": "image_upload_completed",
   "payload": {
     "clientId": "2af17b68-5e36-4f52-80e3-f740a9aaf4ac",
-    "markdown": "[example.webp](https://r2.2libra.com/i/2026/08/example.webp)"
+    "markdown": "![example.webp](https://r2.2libra.com/i/2026/08/example.webp)"
   }
 }
 ```
 
-`libra-bridge.js` 根据发起按钮保存的 `requestId` 找到对应 W-MD Editor，在收到 `selected` 后按顺序插入 `<!-- 2libra-upload:{clientId} -->`，收到成功事件后将占位符替换为 `[title](图片url)`。成功事件不再包含独立的 `url` 字段；桥接脚本使用原生 textarea setter，并派发 `input`/`change` 事件同步页面状态。多图即使乱序完成，也仍按占位符位置写回。
+`libra-bridge.js` 根据发起按钮保存的 `requestId` 找到对应 W-MD Editor，在收到 `selected` 后插入 `<!-- 2libra-upload:{clientId} -->`，收到成功事件后将占位符替换为 `![title](图片url)`。成功事件不再包含独立的 `url` 字段；桥接脚本使用原生 textarea setter，并派发 `input`/`change` 事件同步页面状态。保留逐项占位符机制，后续扩展批量选择时仍可按原位置写回。
 
-稳定错误码限定为 `USER_CANCELLED`、`INVALID_IMAGE`、`FILE_TOO_LARGE`、`TICKET_EXPIRED`、`UPLOAD_REJECTED`、`NETWORK_ERROR` 和 `PAGE_GONE`。错误消息不包含响应正文、票据、本地 URI、文件路径或异常堆栈。
+稳定错误码限定为 `USER_CANCELLED`、`INVALID_IMAGE`、`FILE_TOO_LARGE`、`UPLOAD_REJECTED`、`NETWORK_ERROR` 和 `PAGE_GONE`。错误消息不包含响应正文、本地 URI、文件路径或异常堆栈。
 
 ### 兼容文件回调的完成语义
 
@@ -1081,8 +1075,8 @@ Bridge 使用同一个 `requestId` 返回事件，成功事件只携带要插入
 6. payload 大小、字段数和字符串长度均有限制。
 7. URL 使用 HTTPS，host 与 action 对应的 allowlist 匹配。
 8. Bridge 不提供文件读取、Cookie 读取、任意 Intent、任意 JS 执行或系统设置能力。
-9. `pick_and_upload_images` 只允许在 `/post/create` 或明确的帖子编辑路由、可见主 frame 和用户手势窗口内调用；同一页面同时只能有一个批次。
-10. `uploadTicket` 设单独长度上限，只传给 2Libra 上传代理，不写日志、不回显给 H5，也不能用作任意 URL 的 Authorization。
+9. `pick_and_upload_images` 只允许在 `/post/create` 或明确的帖子编辑路由、可见主 frame 和用户手势窗口内调用，且 payload 必须为空；同一页面同时只能有一个批次。
+10. 图床请求只能使用 Tikolu 或 Photo Lily 的固定 HTTPS endpoint；返回 URL 必须匹配发起批次的 provider host，不能由响应扩展 allowlist。
 
 论坛正文属于用户生成内容；即使消息来源是站点主域，原生侧也必须按不可信输入处理。
 
@@ -1099,7 +1093,8 @@ Bridge 使用同一个 `requestId` 返回事件，成功事件只携带要插入
 | 点击帖子 | WebMessage + URL 兜底 | `PostActivity` | 否 |
 | 点击正文图片 | WebMessage | `MediaPreviewActivity` | 否 |
 | 点击直接视频 | WebMessage | `VideoPlayerActivity` + `LibraGSYVideoPlayer` | 否 |
-| 点击发帖图片 | `pick_and_upload_images` | PictureSelector 最多 9 图 + uCrop + 3 路图床上传 | 接收事件并写入编辑器 |
+| 点击发帖图片 | `pick_and_upload_images` | PictureSelector 单图 + uCrop + 当前图床上传 | 接收事件并写入编辑器 |
+| 修改图床源 | 菜单设置页“图床源” | 持久化 Tikolu/Photo Lily，下一批次生效 | 不涉及 H5 |
 | 旧 H5 图片控件 | `onShowFileChooser()` | PictureSelector 单选 + uCrop | 使用原网站上传流程 |
 | 点击外站链接 | `shouldOverrideUrlLoading()` | Custom Tab/浏览器 | 否 |
 | 点击下载链接 | `DownloadListener` | 系统下载管理器 | 否 |
@@ -1259,9 +1254,10 @@ Android 14（当前 `targetSdk 34`）必须区分“全部照片”“部分照�
 
 - `LibraWebChromeClient.onShowFileChooser()`。
 - `pick_and_upload_images` Bridge 协议及论坛 H5 编辑器适配。
-- PictureSelector 首选流程最多 9 图、兼容流程单图及图片类型过滤。
+- PictureSelector 首选流程单图、兼容流程单图及图片类型过滤。
 - uCrop 裁切引擎、GIF/WebP 跳过策略和 `FileProvider` 结果转换。
-- 2Libra 短时上传票据与图片上传代理接口。
+- Tikolu/Photo Lily 固定 provider 工厂、multipart 上传与响应 URL allowlist。
+- “图床源”设置行、单选对话框和独立 MMKV 持久化。
 - `WebPageViewModel` + `ImageUploadRepository` 的逐图占位符、3 路并发、进度、重试、取消和页面销毁处理。
 - MIME/大小/URI/HTTPS 直链校验、权限拒绝和选择/裁切取消路径。
 - `NativeActionRouter` 的分享、外站和媒体 Action。
@@ -1271,9 +1267,9 @@ Android 14（当前 `targetSdk 34`）必须区分“全部照片”“部分照�
 - 编辑器图片图标和“插入图片”入口都进入同一原生选择器。
 - JPEG/PNG 选择后进入 uCrop，完成后交给 CompressHelper 压缩；GIF/WebP 保持原格式并跳过裁切。
 - 选择取消、裁切取消、重复点击、权限拒绝和 Activity 退出时回调均恰好完成一次。
-- 最多 9 张图片按选择顺序生成占位符，最多 3 张并发上传；乱序完成不会改变正文顺序。
-- 上传成功后对应输入框自动写入 `[title](图片url)`，成功事件不包含独立的 `url` 字段。
-- 票据过期、单图超限、部分失败、重试、弱网和页面退出不会泄露票据或本地 URI，也不会重复插入。
+- 每张图片按选择顺序生成占位符并上传；乱序完成不会改变正文顺序。
+- 上传成功后对应输入框自动写入 `![title](图片url)`，成功事件不包含独立的 `url` 字段。
+- 单图超限、部分失败、重试、弱网和页面退出不会泄露响应正文或本地 URI，也不会重复插入。
 - 旧 H5 控件仍可通过单图文件回调成功上传，作为新协议未部署时的降级。
 - 非图片文件不会通过图片入口返回给 WebView。
 
@@ -1308,7 +1304,8 @@ Android 14（当前 `targetSdk 34`）必须区分“全部照片”“部分照�
 - 静态规则只允许页面初始化代码调用 `WebView.loadUrl(initialUrl)`；其他生产代码出现 `loadUrl`、`reload`、`goBack` 或 `goForward` 时测试失败。
 - Bridge JSON 缺字段、错误版本、超长字段和未知 action。
 - 上传状态机的并发上限、选择顺序、部分失败、重试复用 `clientId` 和取消传播。
-- 上传响应对 HTTP 状态、JSON schema、HTTPS scheme、可信 host 和 `clientId` 匹配的校验。
+- Tikolu/Photo Lily 的 multipart 字段、成功响应、异常响应、非法 URL、网络失败和取消映射。
+- 图床设置覆盖默认 Tikolu、Photo Lily 切换持久化、非法值回退和批次 provider 快照。
 - 媒体 URL 对 `/i/`、`/avatars/`、`/badge/`、`/emojis/` 的分类。
 - 三个 Tab 根页面、默认选中项和详情页面的返回边界。
 - `ForumMenuLocalDataSource` 的首次默认值、JSON 损坏恢复和有序列表往返；`ForumMenuRepository` 的 revision 与 Flow 输出。
@@ -1356,8 +1353,8 @@ Android 14（当前 `targetSdk 34`）必须区分“全部照片”“部分照�
 - PictureSelector 选择成功、取消、权限拒绝、无效 URI、选图期间退出页面。
 - 选择 9 张图片时立即按顺序出现 9 个占位符，实际上传并发始终不超过 3，乱序响应仍替换正确占位符。
 - 单批次包含成功、超限、服务端拒绝和断网图片时，成功项保留，失败项可单独重试，成功项写入的 Markdown 图片可正常访问。
-- 上传票据过期、重复使用和跨用户使用均被服务端拒绝；日志、崩溃上报、WebView 消息和本地存储中不存在票据。
-- 服务端在既有可信 CDN allowlist 内切换主/备用图床后客户端无需升级；新增域名必须先通过签名配置或 App 升级进入 allowlist。
+- provider 返回非法 URL、异常响应或断网时只暴露稳定错误码；日志、崩溃上报、WebView 消息和本地存储中不存在响应正文或本地 URI。
+- 在设置页切换 Tikolu/Photo Lily 后，下一次上传使用新 provider；正在进行的批次保持原 provider。
 - H5 编辑器撤销/重做、继续输入、保存草稿和正式发帖后 Markdown 内容一致，自动写入后没有 textarea 与 React 状态不同步。
 - JPEG/PNG 裁切成功与取消都能正确结束 WebView 文件回调。
 - 同一页面连续两次请求文件时，旧回调先收到取消结果。
@@ -1401,9 +1398,9 @@ Android 14（当前 `targetSdk 34`）必须区分“全部照片”“部分照�
 | 保存图片发生跨域重定向 | 被利用下载非论坛资源 | 每次重定向后重新校验 scheme、host、path、MIME 和大小 |
 | API 26～28 用户拒绝写入权限 | 无法保存到公共相册 | 保持预览可用，仅提示保存失败并允许再次触发授权 |
 | H5 编辑器协议或工具栏 DOM 变化 | 原生图片入口或 URL 回填失败 | 正式 Bridge 协议优先；注入选择器集中管理并做 SPA 回归；保留标准文件回调降级 |
-| 第三方图床接口、token 或服务条款变化 | 图片上传失败或凭据泄露 | 变化封装在 2Libra 上传代理；APK 不保存图床凭据、不抓取网页 token |
-| 上传票据被记录或复用 | 越权上传 | 票据短时、限用户/用途/数量、完成即失效；客户端仅内存保存并对日志脱敏 |
-| 多图上传乱序或部分失败 | 正文图片顺序错乱、重复插入 | 逐图 `clientId` 占位符、并发上限 3、幂等 uploadId 和单项重试 |
+| 第三方图床接口或服务条款变化 | 图片上传失败或凭据泄露 | 变化封装在 provider adapter；APK 不保存图床凭据、不抓取网页 token |
+| provider 回包包含外部或非 HTTPS 地址 | 恶意 URL 被写入正文 | 只接受当前批次对应的固定 provider host，并转换为稳定错误码 |
+| 上传乱序或部分失败 | 正文图片顺序错乱、重复插入 | 逐图 `clientId` 占位符、幂等 uploadId 和单项重试 |
 | 上传期间结束发帖 Activity | 后台继续消耗流量或结果写入失效页面 | Activity 结束或 POST 切换业务路由时取消任务并关闭 reply channel，不使用后台 WorkManager |
 | PictureSelector 与 uCrop 版本不一致 | 裁切回调或资源运行时异常 | 两个 artifact 使用同一 Version Catalog 版本键并一起升级 |
 | Android 14 只授权部分照片 | 自定义相册缺图或权限状态误判 | 接管权限、重新查询；必要时用 `openSystemGallery()` 降级 |
@@ -1425,9 +1422,9 @@ Android 14（当前 `targetSdk 34`）必须区分“全部照片”“部分照�
 9. 所有 H5 业务 URL 跳转均创建新 Activity；来源 WebView 只加载自己的初始 URL，不执行二次 `loadUrl()`、`reload()`、`goBack()` 或 `goForward()`，系统返回按 Activity 栈逐层关闭。
 10. 帖子点击稳定进入独立详情页，详情内继续点击页面仍新建 Activity，外站不会进入认证 WebView。
 11. 帖子图片可进入 PhotoView 全屏预览、缩放、分页并长按原格式保存；直接视频进入 GSYVideoPlayer，并支持拖动、VTT 小图预览、播放/暂停、六档倍速和五种画幅。
-12. 发帖图片入口调用 PictureSelector；JPEG/PNG 经 uCrop 裁切和 CompressHelper 压缩，GIF/WebP 保持原图，最多 9 张、3 路并发上传到 2Libra 上传代理。
-13. 每张上传成功后由桥接脚本按原选择顺序将 `[title](图片url)` 写入对应输入框；部分失败可以单独重试，旧 H5 单图上传仍可降级使用。
-14. APK 不包含图床密钥、第三方页面 token 或公共代理配置；短时上传票据不落盘、不进日志且只能用于 2Libra 上传代理。
+12. 发帖图片入口调用 PictureSelector 单选；JPEG/PNG 经 uCrop 裁切和 CompressHelper 压缩，GIF/WebP 保持原图，上传到当前选择的 Tikolu 或 Photo Lily。
+13. 每张上传成功后由桥接脚本按原选择顺序将 `![title](图片url)` 写入对应输入框；部分失败可以单独重试，旧 H5 单图上传仍可降级使用。
+14. APK 不包含图床密钥、第三方页面 token 或公共代理配置；provider 请求和 URL 只使用固定 allowlist。
 15. Bridge 只开放白名单动作，并完成 origin、主 frame、路由、用户手势和 payload 校验。
 16. 同一 Wi-Fi 下可完成 DLNA/UPnP 发现、投放、远端播放/暂停/seek 和退投续播；认证视频使用短时签名 URL，不外发 Cookie。
 17. API 26、API 34 和最新 System WebView 环境通过核心回归测试。

@@ -52,6 +52,7 @@ class LibraWebViewClient(
         if (!request.isForMainFrame) return false
         val route = routePolicy.classify(request.url.toString())
         if (allowLoginFlowNavigation && routePolicy.isAllowedLoginFlowUrl(route.url)) return false
+        if (routePolicy.isAllowedInlineProfileNavigation(initialUrl, route.url)) return false
         if (
             request.isRedirect &&
             route.isSitePage &&
@@ -71,6 +72,7 @@ class LibraWebViewClient(
     override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
         val route = routePolicy.classify(url)
         if (allowLoginFlowNavigation && routePolicy.isAllowedLoginFlowUrl(route.url)) return false
+        if (routePolicy.isAllowedInlineProfileNavigation(initialUrl, route.url)) return false
         if (route.isSitePage && routePolicy.isAllowedSamePageRedirect(initialUrl, route.url)) {
             return false
         }

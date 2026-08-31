@@ -1,6 +1,8 @@
 package com.suixin.sx2libra.ui.menu
 
 import com.suixin.sx2libra.model.ForumMenu
+import com.suixin.sx2libra.model.ImageHost
+import com.suixin.sx2libra.model.SiteRoute
 
 enum class MenuSettingsError {
     INVALID_NAME,
@@ -25,10 +27,11 @@ data class MenuSettingsUiState(
     val startRevision: Long = 0L,
     val currentRevision: Long = 0L,
     val pendingDelete: PendingDelete? = null,
+    val availableRoutes: List<SiteRoute> = emptyList(),
+    val selectedImageHost: ImageHost = ImageHost.TIKOLU,
     val error: MenuSettingsError? = null,
     val isLoading: Boolean = true
 ) {
     val hasChanges: Boolean
         get() = menus != startMenus
 }
-
