@@ -1,0 +1,43 @@
+# Gradle
+.gradle/
+build/
+
+# Local configuration
+local.properties
+*.local
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Kotlin/Android generated files
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+
+# Signing keys and credentials
+*.jks
+*.keystore
+keystore.properties
+secrets.properties
+google-services.json
+
+# Logs and crash dumps
+*.log
+*.hprof
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local browser automation artifacts
+.playwright-cli/
+.playwright-mcp/

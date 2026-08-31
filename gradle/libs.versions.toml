@@ -1,0 +1,58 @@
+[versions]
+agp = "8.4.0-rc02"
+kotlin = "1.9.0"
+junit = "4.13.2"
+junitVersion = "1.3.0"
+espressoCore = "3.7.0"
+androidxCore = "1.13.1"
+androidxAppcompat = "1.7.1"
+androidxActivity = "1.8.0"
+androidxFragment = "1.6.1"
+androidxLifecycle = "2.6.1"
+androidxSavedState = "1.2.1"
+androidxRecyclerView = "1.3.2"
+androidxViewPager2 = "1.1.0"
+androidxSwipeRefreshLayout = "1.1.0"
+androidxConstraintLayout = "2.2.1"
+material = "1.12.0"
+coroutines = "1.9.0"
+mmkv = "2.4.2"
+androidxWebkit = "1.12.1"
+pictureSelector = "v3.11.2"
+photoView = "2.3.0"
+glide = "4.16.0"
+gsyVideoPlayer = "13.1.0"
+uCrop = "v3.11.2"
+compressHelper = "1.0.5"
+
+[libraries]
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "androidxCore" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "androidxAppcompat" }
+androidx-activity-ktx = { group = "androidx.activity", name = "activity-ktx", version.ref = "androidxActivity" }
+androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "androidxFragment" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
+androidx-lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "androidxLifecycle" }
+androidx-lifecycle-viewmodel-savedstate = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-savedstate", version.ref = "androidxLifecycle" }
+androidx-savedstate = { group = "androidx.savedstate", name = "savedstate", version.ref = "androidxSavedState" }
+androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "androidxRecyclerView" }
+androidx-viewpager2 = { group = "androidx.viewpager2", name = "viewpager2", version.ref = "androidxViewPager2" }
+androidx-swiperefreshlayout = { group = "androidx.swiperefreshlayout", name = "swiperefreshlayout", version.ref = "androidxSwipeRefreshLayout" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "androidxConstraintLayout" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test-jvm", version.ref = "coroutines" }
+mmkv = { group = "com.tencent", name = "mmkv", version.ref = "mmkv" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "androidxWebkit" }
+pictureselector = { group = "io.github.lucksiege", name = "pictureselector", version.ref = "pictureSelector" }
+ucrop = { group = "io.github.lucksiege", name = "ucrop", version.ref = "uCrop" }
+photoview = { group = "com.github.chrisbanes", name = "PhotoView", version.ref = "photoView" }
+glide = { group = "com.github.bumptech.glide", name = "glide", version.ref = "glide" }
+gsyvideoplayer = { group = "io.github.carguo", name = "gsyvideoplayer-java", version.ref = "gsyVideoPlayer" }
+compress-helper = { group = "com.github.nanchen2251", name = "CompressHelper", version.ref = "compressHelper" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

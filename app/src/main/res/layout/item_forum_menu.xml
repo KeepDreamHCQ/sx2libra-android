@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="64dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:background="@drawable/bg_forum_menu_item"
+    android:paddingStart="16dp"
+    android:paddingEnd="8dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/menu_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.Sx2libra.Body" />
+        <TextView
+            android:id="@+id/menu_path"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="middle"
+            android:maxLines="1"
+            android:textAppearance="@style/TextAppearance.Sx2libra.Secondary" />
+    </LinearLayout>
+
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/menu_delete"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        style="@style/Widget.Sx2libra.IconButton"
+        android:contentDescription="@string/menu_delete_description"
+        android:src="@drawable/ic_delete_outline" />
+
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/menu_drag_handle"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        style="@style/Widget.Sx2libra.IconButton"
+        android:src="@drawable/ic_drag_handle" />
+</LinearLayout>

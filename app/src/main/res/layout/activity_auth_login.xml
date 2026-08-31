@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/auth_login_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/surface_background">
+
+    <com.suixin.sx2libra.web.LibraWebViewRefreshLayout
+        android:id="@+id/auth_login_refresh"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <WebView
+            android:id="@+id/auth_login_web_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </com.suixin.sx2libra.web.LibraWebViewRefreshLayout>
+
+    <ProgressBar
+        android:id="@+id/auth_login_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:max="100"
+        android:progressTint="@color/libra_primary"
+        android:indeterminateTint="@color/libra_primary"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/auth_login_error"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:padding="24dp"
+        android:textAppearance="@style/TextAppearance.Sx2libra.Error"
+        android:text="@string/web_page_load_error"
+        android:visibility="gone" />
+</FrameLayout>

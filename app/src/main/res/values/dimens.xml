@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="libra_radius_field">4dp</dimen>
+    <dimen name="libra_radius_box">8dp</dimen>
+    <dimen name="libra_radius_dialog">8dp</dimen>
+    <dimen name="libra_tab_padding">12dp</dimen>
+    <dimen name="libra_icon_button_padding">12dp</dimen>
+    <dimen name="libra_media_counter_padding_horizontal">12dp</dimen>
+    <dimen name="libra_media_counter_padding_vertical">8dp</dimen>
+    <dimen name="libra_media_progress_size">40dp</dimen>
+    <dimen name="libra_video_preview_width">240dp</dimen>
+    <dimen name="libra_video_preview_height">135dp</dimen>
+    <dimen name="libra_video_preview_top">12dp</dimen>
+    <dimen name="libra_video_seekbar_height">48dp</dimen>
+    <dimen name="libra_media_controls_height">56dp</dimen>
+    <dimen name="libra_media_control_padding">8dp</dimen>
+</resources>

@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">sx2libra</string>
+    <string name="greeting">2Libra</string>
+    <string name="web_page_load_error">页面加载失败，请检查网络后重试。</string>
+    <string name="nav_posts">帖子</string>
+    <string name="nav_messages">消息</string>
+    <string name="nav_profile">我的</string>
+    <string name="root_navigation_description">主导航</string>
+    <string name="post_tabs_description">帖子分类</string>
+    <string name="menu_settings_description">管理帖子菜单</string>
+    <string name="menu_settings_title">帖子菜单</string>
+    <string name="menu_add_description">新增帖子菜单</string>
+    <string name="menu_delete_description">删除此帖子菜单</string>
+    <string name="menu_drag_handle_description">拖动 %1$s 调整顺序</string>
+    <string name="menu_add_title">新增帖子菜单</string>
+    <string name="menu_add_confirm">保存</string>
+    <string name="menu_name_hint">菜单名称</string>
+    <string name="menu_path_hint">路径</string>
+    <string name="menu_path_prefix">固定前缀：https://2libra.com/</string>
+    <string name="menu_delete_title">删除帖子菜单</string>
+    <string name="menu_delete_message">确定删除“%1$s”吗？</string>
+    <string name="menu_delete_confirm">删除</string>
+    <string name="menu_error_name">请输入 1～20 个字符的菜单名称</string>
+    <string name="menu_error_path">请输入合法的站内相对路径</string>
+    <string name="menu_error_duplicate_name">菜单名称已存在</string>
+    <string name="menu_error_duplicate_path">菜单路径已存在</string>
+    <string name="menu_error_not_found">菜单不存在</string>
+    <string name="menu_error_last">至少保留一个菜单</string>
+    <string name="menu_error_order">菜单顺序无效</string>
+    <string name="menu_error_storage">菜单保存失败，请稍后重试</string>
+    <string name="login_unavailable">暂时无法打开登录页</string>
+</resources>

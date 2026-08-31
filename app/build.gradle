@@ -1,0 +1,96 @@
+import java.util.Properties
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.jetbrains.kotlin.android)
+}
+
+def signingPropertiesFile = rootProject.file("keystore.properties")
+def signingProperties = new Properties()
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.withInputStream { signingProperties.load(it) }
+}
+
+android {
+    namespace 'com.suixin.sx2libra'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.suixin.sx2libra"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (signingPropertiesFile.exists()) {
+            release {
+                storeFile rootProject.file(signingProperties["storeFile"])
+                storeType signingProperties["storeType"]
+                keyAlias signingProperties["keyAlias"]
+                storePassword signingProperties["storePassword"]
+                keyPassword signingProperties["keyPassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (signingPropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+}
+
+dependencies {
+
+    implementation libs.androidx.core.ktx
+    implementation libs.androidx.appcompat
+    implementation libs.androidx.activity.ktx
+    implementation libs.androidx.fragment.ktx
+    implementation libs.androidx.lifecycle.runtime.ktx
+    implementation libs.androidx.lifecycle.viewmodel.ktx
+    implementation libs.androidx.lifecycle.viewmodel.savedstate
+    implementation libs.androidx.savedstate
+    implementation libs.androidx.webkit
+    implementation libs.androidx.recyclerview
+    implementation libs.androidx.viewpager2
+    implementation libs.androidx.swiperefreshlayout
+    implementation libs.androidx.constraintlayout
+    implementation libs.material
+    implementation libs.kotlinx.coroutines.android
+    implementation libs.mmkv
+    implementation libs.pictureselector
+    implementation libs.ucrop
+    implementation libs.photoview
+    implementation libs.glide
+    implementation libs.gsyvideoplayer
+    implementation(libs.compress.helper) {
+        // CompressHelper 1.0.5 declares its demo app's legacy support stack;
+        // the library classes themselves have no support-library references.
+        exclude group: 'com.android.support'
+    }
+
+    testImplementation libs.junit
+    testImplementation libs.kotlinx.coroutines.test
+    androidTestImplementation libs.androidx.junit
+    androidTestImplementation libs.androidx.espresso.core
+}
