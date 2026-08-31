@@ -54,6 +54,12 @@ class LibraWebViewClient(
         if (allowLoginFlowNavigation && routePolicy.isAllowedLoginFlowUrl(route.url)) return false
         if (routePolicy.isAllowedInlineProfileNavigation(initialUrl, route.url)) return false
         if (
+            route.isSitePage &&
+            routePolicy.isAllowedInlinePaginationNavigation(initialUrl, route.url)
+        ) {
+            return false
+        }
+        if (
             request.isRedirect &&
             route.isSitePage &&
             routePolicy.isAllowedSamePageRedirect(initialUrl, route.url)
@@ -73,6 +79,9 @@ class LibraWebViewClient(
         val route = routePolicy.classify(url)
         if (allowLoginFlowNavigation && routePolicy.isAllowedLoginFlowUrl(route.url)) return false
         if (routePolicy.isAllowedInlineProfileNavigation(initialUrl, route.url)) return false
+        if (route.isSitePage && routePolicy.isAllowedInlinePaginationNavigation(initialUrl, route.url)) {
+            return false
+        }
         if (route.isSitePage && routePolicy.isAllowedSamePageRedirect(initialUrl, route.url)) {
             return false
         }

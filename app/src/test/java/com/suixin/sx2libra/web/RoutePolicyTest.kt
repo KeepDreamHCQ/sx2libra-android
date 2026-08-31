@@ -83,6 +83,69 @@ class RoutePolicyTest {
     }
 
     @Test
+    fun keepsValidPostListPaginationInTheCurrentWebView() {
+        assertTrue(
+            policy.isAllowedInlinePaginationNavigation(
+                "https://2libra.com/",
+                "https://2libra.com/?p=2",
+            ),
+        )
+        assertTrue(
+            policy.isAllowedInlinePaginationNavigation(
+                "https://2libra.com/node/android?p=2",
+                "https://2libra.com/node/android?p=5",
+            ),
+        )
+        assertTrue(
+            policy.isAllowedInlinePaginationNavigation(
+                "https://2libra.com/post/latest?p=1",
+                "https://2libra.com/post/latest",
+            ),
+        )
+    }
+
+    @Test
+    fun resetsOnlyValidPaginatedPostListUrlsToPageOne() {
+        assertEquals(
+            "https://2libra.com/post/latest?p=1#top",
+            policy.paginationPageOneUrl("https://2libra.com/post/latest?p=5#top"),
+        )
+        assertEquals(
+            "https://2libra.com/node/android?p=1",
+            policy.paginationPageOneUrl("https://2libra.com/node/android?p=2"),
+        )
+        assertNull(policy.paginationPageOneUrl("https://2libra.com/post/latest"))
+        assertNull(policy.paginationPageOneUrl("https://2libra.com/post/latest?p=1"))
+    }
+
+    @Test
+    fun rejectsUnsafePaginationNavigation() {
+        val initial = "https://2libra.com/post/latest"
+        assertFalse(
+            policy.isAllowedInlinePaginationNavigation(
+                initial,
+                "https://2libra.com/post/hot/today?p=2",
+            ),
+        )
+        assertFalse(
+            policy.isAllowedInlinePaginationNavigation(
+                initial,
+                "https://example.com/post/latest?p=2",
+            ),
+        )
+        listOf(
+            "https://2libra.com/post/latest?p=0",
+            "https://2libra.com/post/latest?p=-1",
+            "https://2libra.com/post/latest?p=abc",
+            "https://2libra.com/post/latest?p=2&p=3",
+            "https://2libra.com/post/latest?p=2&sort=hot",
+        ).forEach { target ->
+            assertFalse(policy.isAllowedInlinePaginationNavigation(initial, target))
+            assertNull(policy.paginationPageOneUrl(target))
+        }
+    }
+
+    @Test
     fun keepsTheFiveProfileTabsInTheSameWebView() {
         val initial = "https://2libra.com/user/suixin/about"
         listOf("about", "post", "comment", "favorites", "history").forEach { tab ->

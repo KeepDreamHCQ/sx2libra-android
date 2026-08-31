@@ -12,21 +12,33 @@ open class LibraWebViewRefreshLayout @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : SwipeRefreshLayout(context, attrs) {
     private var webView: WebView? = null
+    private var routePolicy: RoutePolicy = RoutePolicy()
 
     init {
         setColorSchemeResources(R.color.libra_primary, R.color.libra_accent)
         setProgressBackgroundColorSchemeResource(R.color.surface_subtle)
         setOnRefreshListener {
-            webView?.reload() ?: setRefreshing(false)
+            val currentWebView = webView
+            if (currentWebView == null) {
+                setRefreshing(false)
+                return@setOnRefreshListener
+            }
+            val pageOneUrl = routePolicy.paginationPageOneUrl(currentWebView.url)
+            if (pageOneUrl != null) {
+                currentWebView.loadUrl(pageOneUrl)
+            } else {
+                currentWebView.reload()
+            }
         }
     }
 
-    /** Connects the page WebView that should be reloaded by the gesture. */
-    fun bind(webView: WebView) {
+    /** Connects the page WebView and URL policy used by the refresh gesture. */
+    fun bind(webView: WebView, routePolicy: RoutePolicy = RoutePolicy()) {
         require(webView.parent == null || webView.parent === this) {
             "The WebView must be a child of LibraWebViewRefreshLayout"
         }
         this.webView = webView
+        this.routePolicy = routePolicy
     }
 
     /** Stops the indicator when the current page finishes or cannot load. */

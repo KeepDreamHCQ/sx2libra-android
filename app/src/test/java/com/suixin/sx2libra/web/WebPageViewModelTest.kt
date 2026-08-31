@@ -90,6 +90,25 @@ class WebPageViewModelTest {
     }
 
     @Test
+    fun paginationNavigationStaysInTheCurrentViewModelPage() {
+        val viewModel = WebPageViewModel("https://2libra.com/post/latest")
+        val pageTwo = "https://2libra.com/post/latest?p=2"
+
+        viewModel.onNavigationRequested(pageTwo, hasUserGesture = true)
+        assertNull(viewModel.uiState.value.pendingAction)
+
+        viewModel.onPageCommitted(pageTwo)
+        assertNull(viewModel.uiState.value.pendingAction)
+        assertEquals(pageTwo, viewModel.uiState.value.currentUrl)
+
+        val pageFive = "https://2libra.com/post/latest?p=5"
+        viewModel.onNavigationRequested(pageFive, hasUserGesture = true)
+        viewModel.onPageCommitted(pageFive)
+        assertNull(viewModel.uiState.value.pendingAction)
+        assertEquals(pageFive, viewModel.uiState.value.currentUrl)
+    }
+
+    @Test
     fun invalidAndExternalRoutesNeverBecomeWebPageInitialUrls() {
         val viewModel = WebPageViewModel("https://2libra.com/")
 

@@ -24,8 +24,9 @@ import kotlinx.coroutines.launch
 
 /**
  * A menu page host.  Every menu owns one secure WebView whose only initial URL
- * is the validated ForumMenu URL; subsequent main-frame routes become fresh
- * Activity actions handled by PageNavigator.
+ * is the validated ForumMenu URL; ordinary subsequent main-frame routes become
+ * fresh Activity actions handled by PageNavigator, while list pagination stays
+ * in this WebView.
  */
 class ForumMenuPageFragment : Fragment() {
     private val routePolicy = RoutePolicy()

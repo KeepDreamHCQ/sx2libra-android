@@ -693,20 +693,22 @@ override fun shouldOverrideUrlLoading(
 
 返回 `true` 后只允许 ViewModel 产生 `OpenPageAction`，不能调用 `view.loadUrl(target)`。`isAllowedSamePageRedirect()` 只放行完成当前初始请求所需的同业务路由规范化重定向；跨业务路由、登录页和外站不属于该范围。
 
+帖子列表分页是唯一的同页面业务导航例外：首页、节点列表、今日热议、近期热议和新发表页面的合法 `p` 页码链接（同源、同路径、仅一个正整数 `p` 参数）由当前 WebView 正常加载，ViewModel 只更新 `currentUrl`，不产生新的 Activity。桥接脚本在接近列表底部一个视口时用同源 `fetch` 请求下一页，成功且结构校验通过后一次性追加去重后的帖子项并替换分页控件；请求失败不改变当前 DOM，也不更新 URL 或返回历史。下拉刷新若当前 URL 为 `p>1`，先加载同路径的 `p=1`，否则保持原有 `reload()` 行为。
+
 当前需要识别的地址类型：
 
 | 地址 | 分类 | 行为 |
 | --- | --- | --- |
-| `/` | 默认帖子菜单 | 作为根菜单初始地址时由 `ForumMenuPageFragment` 加载；从 H5 点击时新建 `WebPageActivity` |
-| `/post/hot/today` | 默认帖子菜单 | 作为二级 Tab 初始地址时由 `ForumMenuPageFragment` 加载；从 H5 点击时新建 `WebPageActivity` |
-| `/post/hot/recent` | 默认帖子菜单 | 作为二级 Tab 初始地址时由 `ForumMenuPageFragment` 加载；从 H5 点击时新建 `WebPageActivity` |
-| `/post/latest` | 默认帖子菜单 | 作为二级 Tab 初始地址时由 `ForumMenuPageFragment` 加载；从 H5 点击时新建 `WebPageActivity` |
+| `/` | 默认帖子菜单 | 作为根菜单初始地址时由 `ForumMenuPageFragment` 加载；普通链接新建 `WebPageActivity`，合法 `p` 分页留在当前 WebView |
+| `/post/hot/today` | 默认帖子菜单 | 作为二级 Tab 初始地址时由 `ForumMenuPageFragment` 加载；普通链接新建 `WebPageActivity`，合法 `p` 分页留在当前 WebView |
+| `/post/hot/recent` | 默认帖子菜单 | 作为二级 Tab 初始地址时由 `ForumMenuPageFragment` 加载；普通链接新建 `WebPageActivity`，合法 `p` 分页留在当前 WebView |
+| `/post/latest` | 默认帖子菜单 | 作为二级 Tab 初始地址时由 `ForumMenuPageFragment` 加载；普通链接新建 `WebPageActivity`，合法 `p` 分页留在当前 WebView |
 | `/notifications` | “消息”根页面 | 作为根 Tab 初始地址时由消息 Fragment 加载；从 H5 点击时认证后新建 `WebPageActivity` |
 | `/user/setting/profile` | “我的”根页面 | 作为根 Tab 初始地址时由我的 Fragment 加载；从 H5 点击时认证后新建 `WebPageActivity` |
 | `/auth/login` | 登录页面 | 新建 `LoginActivity` |
 | `/post/create` | 发帖页面 | 新建 `WebPageActivity`，启用发帖图片 Bridge |
 | `/post/{nodeSlug}/{postId}` | 帖子详情 | 每次新建 `PostActivity` |
-| `/node/...`、`/following` | 普通站内页面 | 新建 `WebPageActivity` |
+| `/node/...`、`/following` | 普通站内页面 | 新建 `WebPageActivity`；节点列表的合法 `p` 分页留在当前 WebView |
 | 其他 HTTPS host | 外站 | Custom Tab 或系统浏览器 |
 | `http`、`file`、`content`、`javascript` 等顶层地址 | 非法页面 | 拒绝加载 |
 
@@ -1218,7 +1220,7 @@ Android 14（当前 `targetSdk 34`）必须区分“全部照片”“部分照�
 - 未修改就关闭设置页不刷新 Adapter；有修改时关闭后帖子页立即应用，并尽量保持原选中菜单。
 - 从帖子列表或消息页面打开帖子时均新建一个详情 Activity；详情内再点帖子继续新建 Activity，不复用原 WebView。
 - 帖子查询参数 `commentId` 和分页参数完整保留。
-- 普通站内链接、发帖页和帖子详情均由新 Activity 加载；当前 WebView URL 不被客户端改写。
+- 普通站内链接、发帖页和帖子详情均由新 Activity 加载；帖子列表的合法 `p` 分页留在当前 WebView，自动追加不改写 URL。
 - 系统返回逐层结束 Activity 并恢复上一页面，不调用 WebView `goBack()`，也不会在 Tab 根页面之间产生混乱历史。
 
 ### 阶段 3：接管媒体
@@ -1419,7 +1421,7 @@ Android 14（当前 `targetSdk 34`）必须区分“全部照片”“部分照�
 6. 设置页只有发生实际修改时才通知帖子页；`MenuSettingsViewModel` 和 `PostsViewModel` 通过 Repository 状态及时更新 UI，并保持当前稳定菜单 ID。
 7. 登录状态由默认 WebView Cookie Store 保持，所有论坛菜单、三个根页面与帖子详情共享；客户端不持久化或暴露 Cookie 值。
 8. 点击消息/我的时直接进入对应 H5 根页面；若服务端判定需要登录则重定向到 `/auth/login`，页面级登录流程可修正过期会话状态。
-9. 所有 H5 业务 URL 跳转均创建新 Activity；来源 WebView 只加载自己的初始 URL，不执行二次 `loadUrl()`、`reload()`、`goBack()` 或 `goForward()`，系统返回按 Activity 栈逐层关闭。
+9. 除帖子列表合法 `p` 分页外，所有 H5 业务 URL 跳转均创建新 Activity；分页点击在当前 WebView 加载，自动追加不改写 URL，刷新 `p>1` 回到第 1 页；系统返回按 Activity 栈逐层关闭。
 10. 帖子点击稳定进入独立详情页，详情内继续点击页面仍新建 Activity，外站不会进入认证 WebView。
 11. 帖子图片可进入 PhotoView 全屏预览、缩放、分页并长按原格式保存；直接视频进入 GSYVideoPlayer，并支持拖动、VTT 小图预览、播放/暂停、六档倍速和五种画幅。
 12. 发帖图片入口调用 PictureSelector 单选；JPEG/PNG 经 uCrop 裁切和 CompressHelper 压缩，GIF/WebP 保持原图，上传到当前选择的 Tikolu 或 Photo Lily。

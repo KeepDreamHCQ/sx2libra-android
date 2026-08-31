@@ -79,6 +79,15 @@ open class WebPageViewModel(
         hasUserGesture: Boolean = true,
     ) {
         val route = routePolicy.classify(rawUrl)
+        if (
+            route.isSitePage &&
+            routePolicy.isAllowedInlinePaginationNavigation(lastCommittedUrl, route.url)
+        ) {
+            // Pagination is the one same-WebView business navigation. The
+            // WebView owns the actual load; this callback must not emit an
+            // Activity action.
+            return
+        }
         if (!hasUserGesture && navigationDestination(route) == lastHandledNavigationUrl) {
             return
         }
@@ -139,6 +148,14 @@ open class WebPageViewModel(
         if (
             route.isSitePage &&
             routePolicy.isAllowedInlineProfileNavigation(normalizedInitialUrl, route.url)
+        ) {
+            lastCommittedUrl = route.url
+            _uiState.value = _uiState.value.copy(currentUrl = route.url)
+            return
+        }
+        if (
+            route.isSitePage &&
+            routePolicy.isAllowedInlinePaginationNavigation(lastCommittedUrl, route.url)
         ) {
             lastCommittedUrl = route.url
             _uiState.value = _uiState.value.copy(currentUrl = route.url)

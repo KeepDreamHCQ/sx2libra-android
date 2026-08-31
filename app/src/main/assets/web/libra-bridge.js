@@ -23,6 +23,14 @@
   var UPLOAD_TARGET_TTL_MILLIS = 5 * 60 * 1000;
   var lastUserAvatarUrl = null;
   var lastUserName = null;
+  var PAGINATION_LIST_ITEM_SELECTOR = 'ul.card > li.items-center';
+  var PAGINATION_CARD_SELECTOR = '[data-main-left] div.card[class~="border-base-content/10"]';
+  var PAGINATION_ACTIVE_SELECTOR = '.join-item.btn.btn-sm.btn-active';
+  var PAGINATION_PAGE_PATTERN = /^[1-9][0-9]*$/;
+  var PAGINATION_CHECK_DELAY_MILLIS = 100;
+  var PAGINATION_RECHECK_DELAY_MILLIS = 600;
+  var paginationLoading = false;
+  var paginationCheckTimer = null;
 
   function uuid() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -363,18 +371,63 @@
     });
   }
 
-  function absolute(value) {
+  function absolute(value, base) {
     if (value == null || value === '') return null;
     try {
-      var url = new URL(value, document.location.href);
+      var url = new URL(value, base || document.location.href);
       return url.href.length <= MAX_URL_LENGTH ? url : null;
     } catch (_) {
       return null;
     }
   }
 
+  function normalizedPath(pathname) {
+    return pathname.replace(/\/+$/, '') || '/';
+  }
+
+  function isPostListPath(pathname) {
+    var path = normalizedPath(pathname || '/');
+    return path === '/' ||
+      path === '/post/hot/today' ||
+      path === '/post/hot/recent' ||
+      path === '/post/latest' ||
+      path.indexOf('/node/') === 0;
+  }
+
+  function paginationPage(url) {
+    if (!url || url.origin !== SITE_ORIGIN || !isPostListPath(url.pathname)) return null;
+    if (!url.search) return '1';
+    var query = url.search.slice(1);
+    if (!query || query.indexOf('&') >= 0) return null;
+    var separator = query.indexOf('=');
+    if (separator <= 0 || separator !== query.lastIndexOf('=')) return null;
+    if (query.slice(0, separator) !== 'p') return null;
+    var page = query.slice(separator + 1);
+    return PAGINATION_PAGE_PATTERN.test(page) ? page : null;
+  }
+
+  function isPaginationLink(baseUrl, targetUrl) {
+    return !!(
+      baseUrl && targetUrl &&
+      baseUrl.origin === SITE_ORIGIN &&
+      targetUrl.origin === SITE_ORIGIN &&
+      normalizedPath(baseUrl.pathname) === normalizedPath(targetUrl.pathname) &&
+      paginationPage(baseUrl) !== null &&
+      paginationPage(targetUrl) !== null
+    );
+  }
+
+  function isSamePaginationPage(firstUrl, secondUrl) {
+    return isPaginationLink(firstUrl, secondUrl) &&
+      paginationPage(firstUrl) === paginationPage(secondUrl);
+  }
+
+  function isPaginationUrl(url) {
+    return isPaginationLink(absolute(document.location.href), url);
+  }
+
   function isPostUrl(url) {
-    if (!url || url.origin !== SITE_ORIGIN) return false;
+    if (!url || url.origin !== SITE_ORIGIN || isPostListPath(url.pathname)) return false;
     var parts = url.pathname.split('/').filter(Boolean);
     return parts.length === 3 && parts[0] === 'post';
   }
@@ -406,10 +459,240 @@
 
   function isPostListPage() {
     if (document.location.origin !== SITE_ORIGIN) return false;
-    var path = document.location.pathname.replace(/\/+$/, '') || '/';
+    var path = normalizedPath(document.location.pathname);
     return path === '/post/hot/today' ||
       path === '/post/hot/recent' ||
       path === '/post/latest';
+  }
+
+  function isPaginatedPostListPage() {
+    return document.location.origin === SITE_ORIGIN &&
+      isPostListPath(document.location.pathname);
+  }
+
+  function postIdentity(item, baseUrl) {
+    if (!item || !item.querySelectorAll) return null;
+    var anchors = item.querySelectorAll('a[href]');
+    var base = baseUrl && baseUrl.href ? baseUrl.href : document.location.href;
+    for (var i = 0; i < anchors.length; i++) {
+      var url = absolute(anchors[i].getAttribute('href'), base);
+      if (isPostUrl(url)) return url.origin + normalizedPath(url.pathname);
+    }
+    return null;
+  }
+
+  function chooseLargestListGroup(groups) {
+    var selected = null;
+    for (var i = 0; i < groups.length; i++) {
+      if (!selected || groups[i].items.length > selected.items.length) selected = groups[i];
+    }
+    return selected;
+  }
+
+  function findListStructure(root, baseUrl) {
+    var primaryNodes = root.querySelectorAll(PAGINATION_LIST_ITEM_SELECTOR);
+    var primaryGroups = [];
+    for (var i = 0; i < primaryNodes.length; i++) {
+      if (!postIdentity(primaryNodes[i], baseUrl)) continue;
+      var primaryContainer = primaryNodes[i].parentElement;
+      if (!primaryContainer) continue;
+      var primaryGroup = null;
+      for (var j = 0; j < primaryGroups.length; j++) {
+        if (primaryGroups[j].container === primaryContainer) {
+          primaryGroup = primaryGroups[j];
+          break;
+        }
+      }
+      if (!primaryGroup) {
+        primaryGroup = { kind: 'list', container: primaryContainer, items: [] };
+        primaryGroups.push(primaryGroup);
+      }
+      primaryGroup.items.push(primaryNodes[i]);
+    }
+    var selectedPrimary = chooseLargestListGroup(primaryGroups);
+    if (selectedPrimary) return selectedPrimary;
+
+    var cardNodes = root.querySelectorAll(PAGINATION_CARD_SELECTOR);
+    var cardGroups = [];
+    for (var k = 0; k < cardNodes.length; k++) {
+      if (!postIdentity(cardNodes[k], baseUrl)) continue;
+      var cardContainer = cardNodes[k].parentElement;
+      if (!cardContainer) continue;
+      var cardGroup = null;
+      for (var m = 0; m < cardGroups.length; m++) {
+        if (cardGroups[m].container === cardContainer) {
+          cardGroup = cardGroups[m];
+          break;
+        }
+      }
+      if (!cardGroup) {
+        cardGroup = { kind: 'cards', container: cardContainer, items: [] };
+        cardGroups.push(cardGroup);
+      }
+      cardGroup.items.push(cardNodes[k]);
+    }
+    return chooseLargestListGroup(cardGroups);
+  }
+
+  function paginationGroup(active) {
+    if (!active) return null;
+    if (active.closest) {
+      var join = active.closest('.join');
+      if (join) return join;
+    }
+    var node = active.parentElement;
+    while (node && node !== document.body) {
+      if (node.querySelectorAll(PAGINATION_ACTIVE_SELECTOR).length >= 1 &&
+          node.querySelectorAll('.join-item.btn.btn-sm').length >= 2) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return active.parentElement;
+  }
+
+  function findPagination(root, baseUrl, requireNext) {
+    var activeNodes = root.querySelectorAll(PAGINATION_ACTIVE_SELECTOR);
+    for (var i = 0; i < activeNodes.length; i++) {
+      var active = activeNodes[i];
+      var group = paginationGroup(active);
+      if (!group) continue;
+      var links = group.querySelectorAll('a[href]');
+      var hasPageLink = false;
+      for (var j = 0; j < links.length; j++) {
+        var linkUrl = absolute(links[j].getAttribute('href'), baseUrl && baseUrl.href);
+        if (isPaginationLink(baseUrl, linkUrl)) {
+          hasPageLink = true;
+          break;
+        }
+      }
+      if (!hasPageLink) continue;
+
+      var next = active.nextElementSibling;
+      var nextUrl = next && next.tagName === 'A'
+        ? absolute(next.getAttribute('href'), baseUrl && baseUrl.href)
+        : null;
+      if (requireNext && !isPaginationLink(baseUrl, nextUrl)) continue;
+      return { active: active, group: group, nextUrl: isPaginationLink(baseUrl, nextUrl) ? nextUrl : null };
+    }
+    return null;
+  }
+
+  function directChildUnder(container, node) {
+    var current = node;
+    while (current && current.parentElement && current.parentElement !== container) {
+      current = current.parentElement;
+    }
+    return current && current.parentElement === container ? current : null;
+  }
+
+  function importedNode(node) {
+    return document.importNode ? document.importNode(node, true) : node.cloneNode(true);
+  }
+
+  function appendFetchedPage(currentUrl, responseUrl, responseDocument) {
+    var currentList = findListStructure(document, currentUrl);
+    var fetchedList = findListStructure(responseDocument, responseUrl);
+    var currentPagination = findPagination(document, currentUrl, true);
+    var fetchedPagination = findPagination(responseDocument, responseUrl, false);
+    if (!currentList || !fetchedList || !currentPagination || !fetchedPagination) return false;
+    if (currentList.kind !== fetchedList.kind) return false;
+
+    var existing = Object.create(null);
+    for (var i = 0; i < currentList.items.length; i++) {
+      var currentId = postIdentity(currentList.items[i], currentUrl);
+      if (currentId) existing[currentId] = true;
+    }
+
+    var newItems = [];
+    for (var j = 0; j < fetchedList.items.length; j++) {
+      var fetchedId = postIdentity(fetchedList.items[j], responseUrl);
+      if (!fetchedId || existing[fetchedId]) continue;
+      existing[fetchedId] = true;
+      newItems.push(fetchedList.items[j]);
+    }
+    if (!newItems.length || !currentPagination.group.parentNode) return false;
+
+    var fragment = document.createDocumentFragment();
+    for (var k = 0; k < newItems.length; k++) fragment.appendChild(importedNode(newItems[k]));
+    var replacement = importedNode(fetchedPagination.group);
+    var reference = directChildUnder(currentList.container, currentPagination.group);
+    if (reference) {
+      currentList.container.insertBefore(fragment, reference);
+    } else {
+      currentList.container.appendChild(fragment);
+    }
+
+    currentPagination.group.parentNode.replaceChild(replacement, currentPagination.group);
+    return true;
+  }
+
+  function nearPageBottom() {
+    var root = document.documentElement;
+    if (!root) return false;
+    var viewportHeight = window.innerHeight || root.clientHeight || 0;
+    var scrollTop = window.pageYOffset || root.scrollTop || 0;
+    return root.scrollHeight - scrollTop - viewportHeight <= viewportHeight;
+  }
+
+  function loadNextPaginationPage() {
+    if (paginationLoading || !isPaginatedPostListPage() || !nearPageBottom()) return;
+    var currentUrl = absolute(document.location.href);
+    var currentPagination = findPagination(document, currentUrl, true);
+    if (!currentUrl || !currentPagination || !currentPagination.nextUrl) return;
+    var nextUrl = currentPagination.nextUrl;
+    paginationLoading = true;
+
+    var request;
+    try {
+      request = window.fetch(nextUrl.href, {
+        credentials: 'same-origin',
+        headers: { Accept: 'text/html' },
+        redirect: 'follow'
+      });
+    } catch (_) {
+      paginationLoading = false;
+      return;
+    }
+
+    Promise.resolve(request)
+      .then(function (response) {
+        if (!response || !response.ok) throw new Error('pagination response failed');
+        var responseUrl = absolute(response.url, nextUrl.href);
+        if (!responseUrl || !isSamePaginationPage(nextUrl, responseUrl)) {
+          throw new Error('pagination response route mismatch');
+        }
+        var contentType = response.headers && typeof response.headers.get === 'function'
+          ? response.headers.get('content-type')
+          : null;
+        if (contentType && contentType.toLowerCase().indexOf('text/html') < 0) {
+          throw new Error('pagination response is not html');
+        }
+        return response.text().then(function (html) {
+          return { responseUrl: responseUrl, html: html };
+        });
+      })
+      .then(function (result) {
+        if (!result || typeof DOMParser !== 'function') return false;
+        var responseDocument = new DOMParser().parseFromString(result.html, 'text/html');
+        if (!responseDocument || !responseDocument.documentElement) return false;
+        return appendFetchedPage(currentUrl, result.responseUrl, responseDocument);
+      })
+      .then(function (appended) {
+        paginationLoading = false;
+        if (appended) schedulePaginationCheck(PAGINATION_RECHECK_DELAY_MILLIS);
+      })
+      .catch(function () {
+        paginationLoading = false;
+      });
+  }
+
+  function schedulePaginationCheck(delay) {
+    if (paginationCheckTimer !== null) return;
+    paginationCheckTimer = window.setTimeout(function () {
+      paginationCheckTimer = null;
+      loadNextPaginationPage();
+    }, typeof delay === 'number' ? delay : PAGINATION_CHECK_DELAY_MILLIS);
   }
 
   function postListHeader(navigationControl) {
@@ -668,6 +951,7 @@
     var url = absolute(anchor.href);
     if (!url || event.defaultPrevented) return false;
     if (url.origin === SITE_ORIGIN) {
+      if (isPaginationUrl(url)) return false;
       if (isInlineProfileTabUrl(url)) return false;
       var handled = emit(isPostUrl(url) ? 'open_post' : 'open_page', { url: url.href });
       if (!handled) return false;
@@ -743,12 +1027,13 @@
       if (url == null) return original.apply(window.history, arguments);
       var next = absolute(url);
       if (next && next.origin === SITE_ORIGIN && hasUserActivation() &&
-          !isInlineProfileTabUrl(next)) {
+          !isInlineProfileTabUrl(next) && !isPaginationUrl(next)) {
         var handled = emit(isPostUrl(next) ? 'open_post' : 'open_page', { url: next.href });
         if (handled) return undefined;
       }
       var result = original.apply(window.history, arguments);
       updatePostNavbarVisibility();
+      schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
       return result;
     };
   }
@@ -756,6 +1041,9 @@
   interceptHistory('pushState');
   interceptHistory('replaceState');
   window.addEventListener('popstate', updatePostNavbarVisibility);
+  window.addEventListener('scroll', function () {
+    schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
+  }, false);
 
   /* Optional toolbar affordance: add one button to every editor instance.
    * Reply editors are mounted after the initial page load, so this function
@@ -810,6 +1098,7 @@
       reportUserAvatar();
       reportUserName();
       alignOpenUserMenu();
+      schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
     }).observe(document.documentElement, {
       childList: true,
       subtree: true,
@@ -820,5 +1109,7 @@
   window.addEventListener('resize', function () {
     reportUserAvatar();
     reportUserName();
+    schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
   });
+  schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
 })();

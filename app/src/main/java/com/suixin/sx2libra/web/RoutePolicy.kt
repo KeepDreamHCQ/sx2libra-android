@@ -119,6 +119,32 @@ class RoutePolicy(
         return initialProfile.first == targetProfile.first
     }
 
+    /**
+     * Keeps a paginated post-list navigation in the current WebView.  A
+     * missing query is page one; any query other than one canonical positive
+     * integer `p` parameter is rejected.
+     */
+    fun isAllowedInlinePaginationNavigation(initialUrl: String?, targetUrl: String?): Boolean {
+        val initial = parseSite(initialUrl) ?: return false
+        val target = parseSite(targetUrl) ?: return false
+        if (initial.path != target.path || !isPostListPath(initial.path)) return false
+        return paginationPage(initial) != null && paginationPage(target) != null
+    }
+
+    /** Returns the page-one URL for a paginated post list, or null otherwise. */
+    fun paginationPageOneUrl(rawUrl: String?): String? {
+        val parsed = parseSite(rawUrl) ?: return null
+        if (!isPostListPath(parsed.path)) return null
+        val page = paginationPage(parsed) ?: return null
+        if (page == "1") return null
+        return buildUrl(
+            host = siteHost,
+            path = canonicalEncodedPath(parsed.uri.rawPath?.ifEmpty { "/" } ?: "/"),
+            uri = parsed.uri,
+            rawQuery = "p=1",
+        )
+    }
+
     /** The top-level routes that host post-composer image editors. */
     fun isPostComposerUrl(rawUrl: String?): Boolean {
         val route = classify(rawUrl)
@@ -191,6 +217,24 @@ class RoutePolicy(
             return null
         }
         return segments[1] to segments[2]
+    }
+
+    private fun isPostListPath(path: String): Boolean =
+        path == "/" ||
+            path == "/post/hot/today" ||
+            path == "/post/hot/recent" ||
+            path == "/post/latest" ||
+            path.startsWith("/node/")
+
+    private fun paginationPage(parsed: ParsedUrl): String? {
+        val rawQuery = parsed.uri.rawQuery ?: return "1"
+        if (rawQuery.isEmpty()) return null
+        val parameters = rawQuery.split('&')
+        if (parameters.size != 1) return null
+        val pair = parameters.single().split('=', limit = 2)
+        if (pair.size != 2 || pair[0] != "p") return null
+        val page = pair[1]
+        return page.takeIf { PAGINATION_PAGE_PATTERN.matches(it) }
     }
 
     private fun parse(rawUrl: String): ParsedUrl? {
@@ -276,12 +320,13 @@ class RoutePolicy(
         host: String,
         path: String,
         uri: URI,
+        rawQuery: String? = uri.rawQuery,
     ): String = buildString {
         append(HTTPS_SCHEME)
         append("://")
         append(host)
         append(path)
-        uri.rawQuery?.let {
+        rawQuery?.let {
             append('?')
             append(it)
         }
@@ -308,5 +353,6 @@ class RoutePolicy(
 
         private val LOGIN_PROVIDER_HOSTS = setOf("accounts.google.com")
         private val INLINE_PROFILE_TABS = setOf("about", "post", "comment", "favorites", "history")
+        private val PAGINATION_PAGE_PATTERN = Regex("[1-9][0-9]*")
     }
 }

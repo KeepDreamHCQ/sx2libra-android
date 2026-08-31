@@ -32,7 +32,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Hosts one validated ordinary 2Libra page. Profile tabs may stay in this
- * WebView; other child business navigation becomes a new Activity action.
+ * WebView; other child business navigation becomes a new Activity action and
+ * valid post-list pagination remains in the current WebView.
  */
 open class WebPageActivity : FragmentActivity() {
     protected val routePolicy = RoutePolicy()

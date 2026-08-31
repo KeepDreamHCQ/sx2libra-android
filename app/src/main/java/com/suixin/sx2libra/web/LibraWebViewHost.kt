@@ -31,7 +31,7 @@ class LibraWebViewHost(
     private var destroyed = false
 
     init {
-        bind(webView)
+        bind(webView, routePolicy)
         actionController?.bind(webView)
         webView.webViewClient = LibraWebViewClient(
             initialPageUrl,
