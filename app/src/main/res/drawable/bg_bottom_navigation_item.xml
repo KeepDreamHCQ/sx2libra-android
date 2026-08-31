@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_checked="true">
-        <inset android:insetLeft="4dp" android:insetTop="4dp" android:insetRight="4dp" android:insetBottom="4dp">
-            <shape>
-                <solid android:color="@color/nav_item_selected_background" />
-                <corners android:radius="4dp" />
-            </shape>
-        </inset>
+        <layer-list>
+            <item android:gravity="top">
+                <inset android:insetLeft="24dp" android:insetRight="24dp">
+                    <shape>
+                        <size android:height="2dp" />
+                        <solid android:color="@color/tab_selected" />
+                        <corners android:radius="1dp" />
+                    </shape>
+                </inset>
+            </item>
+        </layer-list>
     </item>
     <item>
         <shape>

@@ -21,8 +21,7 @@
     <color name="text_secondary">#FF71717A</color>
     <color name="icon_primary">#FF3F3F46</color>
     <color name="divider">#FFE4E4E7</color>
-    <color name="nav_item_selected_background">#FF09090B</color>
-    <color name="nav_item_selected_content">#FFE4E4E7</color>
+    <color name="nav_item_selected_content">#FF18181B</color>
     <color name="nav_item_unselected_content">#FF71717A</color>
     <color name="tab_selected">#FF18181B</color>
     <color name="tab_unselected">#FF71717A</color>
