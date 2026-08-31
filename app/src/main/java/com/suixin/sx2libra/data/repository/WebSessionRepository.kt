@@ -47,6 +47,7 @@ class WebSessionRepository(
         if (previous != AuthState.LOGGED_OUT && state == AuthState.LOGGED_OUT) {
             UserAvatarStore.clear()
             UserNameStore.clear()
+            UnreadMessageStore.clear()
             snapshotInvalidator?.invalidate()
         }
         return state
@@ -62,6 +63,7 @@ class WebSessionRepository(
         _authState.value = AuthState.LOGGED_OUT
         UserAvatarStore.clear()
         UserNameStore.clear()
+        UnreadMessageStore.clear()
         cookieDataSource.clearSession()
         cookieDataSource.flush()
         // logout() is suspend, so wait until the private cache is cleared
@@ -73,6 +75,7 @@ class WebSessionRepository(
         _authState.value = AuthState.LOGGED_OUT
         UserAvatarStore.clear()
         UserNameStore.clear()
+        UnreadMessageStore.clear()
         snapshotInvalidator?.invalidate()
     }
 

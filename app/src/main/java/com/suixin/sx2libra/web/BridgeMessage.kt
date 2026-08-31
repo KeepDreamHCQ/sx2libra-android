@@ -19,7 +19,8 @@ enum class NativeAction(val wireName: String) {
     SHARE_POST("share_post"),
     OPEN_EXTERNAL("open_external"),
     USER_AVATAR("user_avatar"),
-    USER_NAME("user_name");
+    USER_NAME("user_name"),
+    UNREAD_MESSAGE_COUNT("unread_message_count");
 
     companion object {
         fun fromWireName(value: String?): NativeAction? = entries.firstOrNull { it.wireName == value }
@@ -58,6 +59,7 @@ sealed class BridgePayload {
     data class OpenExternal(val url: String) : BridgePayload()
     data class UserAvatar(val url: String) : BridgePayload()
     data class UserName(val username: String) : BridgePayload()
+    data class UnreadMessageCount(val count: Int) : BridgePayload()
 }
 
 data class BridgeRequest(
@@ -115,6 +117,7 @@ object BridgeProtocol {
     const val MAX_REQUEST_ID_LENGTH = 64
     const val MAX_TITLE_LENGTH = 160
     const val MAX_CLIENT_ID_LENGTH = 64
+    const val MAX_UNREAD_MESSAGE_COUNT = 1_000_000
 
     private const val EXPECTED_ORIGIN = "https://2libra.com"
     private const val SITE_HOST = "2libra.com"
@@ -242,6 +245,13 @@ object BridgeProtocol {
                     ?.trim()
                     ?.takeIf(AuthContract::isValidUsername)
                     ?.let(BridgePayload::UserName)
+            }
+            NativeAction.UNREAD_MESSAGE_COUNT -> {
+                if (!payload.onlyKeys("count")) return null
+                (payload["count"] as? Long)
+                    ?.takeIf { it in 0L..MAX_UNREAD_MESSAGE_COUNT.toLong() }
+                    ?.toInt()
+                    ?.let(BridgePayload::UnreadMessageCount)
             }
         }
     }

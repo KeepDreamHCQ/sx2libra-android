@@ -10,7 +10,11 @@ import androidx.fragment.app.commitNow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.core.content.ContextCompat
+import com.google.android.material.badge.BadgeDrawable
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.suixin.sx2libra.data.repository.UnreadMessageState
+import com.suixin.sx2libra.data.repository.UnreadMessageStore
 import com.suixin.sx2libra.data.repository.UserNameStore
 import com.suixin.sx2libra.model.AuthContract
 import com.suixin.sx2libra.model.ProtectedRootTab
@@ -29,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var bottomNavigation: BottomNavigationView
+    private lateinit var messagesBadge: BadgeDrawable
     private var rendering = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,9 +43,17 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.main_root).applySystemBarInsets(top = true)
         bottomNavigation = findViewById(R.id.bottom_navigation)
         bottomNavigation.applySystemBarInsets(bottom = true)
+        messagesBadge = bottomNavigation.getOrCreateBadge(R.id.nav_messages).apply {
+            backgroundColor = ContextCompat.getColor(this@MainActivity, R.color.libra_error)
+            clearNumber()
+            isVisible = false
+        }
         bottomNavigation.setOnItemSelectedListener { item ->
             if (rendering) return@setOnItemSelectedListener true
-            MainRootTab.fromItemId(item.itemId)?.let(viewModel::onRootTabSelected)
+            MainRootTab.fromItemId(item.itemId)?.let { target ->
+                viewModel.onRootTabSelected(target)
+                if (target == MainRootTab.MESSAGES) UnreadMessageStore.markRead()
+            }
             true
         }
         bottomNavigation.setOnItemReselectedListener { item ->
@@ -69,6 +82,9 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+                launch {
+                    UnreadMessageStore.state.collect(::renderMessageBadge)
+                }
             }
         }
     }
@@ -83,7 +99,13 @@ class MainActivity : AppCompatActivity() {
         if (state.selectedTab == MainRootTab.PROFILE && UserNameStore.username.value == null) {
             return
         }
+        renderMessageBadge(UnreadMessageStore.state.value)
         showRoot(state.selectedTab)
+    }
+
+    private fun renderMessageBadge(state: UnreadMessageState) {
+        messagesBadge.isVisible = viewModel.uiState.value.selectedTab != MainRootTab.MESSAGES &&
+            state.hasUnacknowledgedMessages
     }
 
     private fun showRoot(tab: MainRootTab) {

@@ -14,6 +14,7 @@ import androidx.webkit.JavaScriptReplyProxy
 import com.suixin.sx2libra.R
 import com.suixin.sx2libra.data.repository.UserAvatarStore
 import com.suixin.sx2libra.data.repository.UserNameStore
+import com.suixin.sx2libra.data.repository.UnreadMessageStore
 import com.suixin.sx2libra.model.ImageUploadEvent
 import com.suixin.sx2libra.model.MediaUrlPolicy
 import com.suixin.sx2libra.ui.media.MediaPreviewActivity
@@ -215,7 +216,7 @@ class DefaultNativeActionController(
         page == NativeActionPage.POST_COMPOSER || page == NativeActionPage.POST_DETAIL
 
     private val delegate = object : NativeActionDelegate, RetryableImageUploadActionDelegate,
-        UserAvatarActionDelegate, UserNameActionDelegate {
+        UserAvatarActionDelegate, UserNameActionDelegate, UnreadMessageActionDelegate {
         override fun openPage(requestId: String, url: String): Boolean {
             if (!active.get() || !trustedGesture.peek()) return false
             viewModel.onNavigationRequested(url, isRedirect = false, hasUserGesture = true)
@@ -257,6 +258,12 @@ class DefaultNativeActionController(
 
         override fun updateUserName(requestId: String, username: String): Boolean {
             return active.get() && UserNameStore.update(username)
+        }
+
+        override fun updateUnreadMessageCount(requestId: String, count: Int): Boolean {
+            if (!active.get()) return false
+            UnreadMessageStore.update(count)
+            return true
         }
 
         override fun previewImages(requestId: String, urls: List<String>, initialIndex: Int): Boolean {
@@ -353,6 +360,7 @@ class DefaultNativeActionController(
         userAvatar = delegate,
         userName = delegate,
         requireUserGestureForNavigation = true,
+        unreadMessages = delegate,
     )
 
     override fun bind(webView: WebView) {

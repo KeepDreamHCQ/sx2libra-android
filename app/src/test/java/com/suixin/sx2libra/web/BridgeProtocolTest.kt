@@ -164,6 +164,34 @@ class BridgeProtocolTest {
     }
 
     @Test
+    fun unreadMessageCountAcceptsBoundedNonNegativeNumbersOnly() {
+        val accepted = parse(
+            "unread_message_count",
+            "{\"count\":3}",
+        )
+        assertTrue(accepted is BridgeParseResult.Accepted)
+        assertEquals(
+            BridgePayload.UnreadMessageCount(3),
+            (accepted as BridgeParseResult.Accepted).request.payload,
+        )
+
+        val negative = parse("unread_message_count", "{\"count\":-1}")
+        assertFalse(negative is BridgeParseResult.Accepted)
+
+        val tooLarge = parse(
+            "unread_message_count",
+            "{\"count\":${BridgeProtocol.MAX_UNREAD_MESSAGE_COUNT + 1}}",
+        )
+        assertFalse(tooLarge is BridgeParseResult.Accepted)
+
+        val extraField = parse(
+            "unread_message_count",
+            "{\"count\":3,\"source\":\"header\"}",
+        )
+        assertFalse(extraField is BridgeParseResult.Accepted)
+    }
+
+    @Test
     fun malformedAndDuplicateFieldsAreRejectedWithoutEmptyUrlUuidBranch() {
         val malformed = BridgeProtocol.parse(
             "{\"version\":1,\"requestId\":\"$requestId\",\"action\":\"open_page\",\"payload\":{\"url\":}",

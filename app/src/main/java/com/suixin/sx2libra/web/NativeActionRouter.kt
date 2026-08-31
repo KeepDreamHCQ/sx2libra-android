@@ -39,6 +39,11 @@ interface UserNameActionDelegate {
     fun updateUserName(requestId: String, username: String): Boolean
 }
 
+/** Receives the current unread-message count from the authenticated page shell. */
+interface UnreadMessageActionDelegate {
+    fun updateUnreadMessageCount(requestId: String, count: Int): Boolean
+}
+
 /** Optional value-only retry boundary for a completed upload batch. */
 interface RetryableImageUploadActionDelegate {
     fun retryImageUpload(requestId: String, clientId: String): Boolean
@@ -58,6 +63,7 @@ class NativeActionRouter(
     private val userAvatar: UserAvatarActionDelegate? = null,
     private val userName: UserNameActionDelegate? = null,
     private val requireUserGestureForNavigation: Boolean = false,
+    private val unreadMessages: UnreadMessageActionDelegate? = null,
 ) {
     constructor(delegate: NativeActionDelegate) : this(delegate, delegate, delegate)
 
@@ -103,6 +109,8 @@ class NativeActionRouter(
                     userAvatar?.updateUserAvatar(request.requestId, payload.url) == true
                 is BridgePayload.UserName ->
                     userName?.updateUserName(request.requestId, payload.username) == true
+                is BridgePayload.UnreadMessageCount ->
+                    unreadMessages?.updateUnreadMessageCount(request.requestId, payload.count) == true
             }
             if (handled) BridgeReply.success(request.requestId) else {
                 BridgeReply.failure(request.requestId, BridgeErrorCode.INVALID_PAYLOAD)

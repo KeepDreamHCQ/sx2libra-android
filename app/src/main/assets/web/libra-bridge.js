@@ -23,12 +23,14 @@
   var UPLOAD_TARGET_TTL_MILLIS = 5 * 60 * 1000;
   var lastUserAvatarUrl = null;
   var lastUserName = null;
+  var lastUnreadMessageCount = null;
   var PAGINATION_LIST_ITEM_SELECTOR = 'ul.card > li.items-center';
   var PAGINATION_CARD_SELECTOR = '[data-main-left] div.card[class~="border-base-content/10"]';
   var PAGINATION_ACTIVE_SELECTOR = '.join-item.btn.btn-sm.btn-active';
   var PAGINATION_PAGE_PATTERN = /^[1-9][0-9]*$/;
   var PAGINATION_CHECK_DELAY_MILLIS = 100;
   var PAGINATION_RECHECK_DELAY_MILLIS = 600;
+  var UNREAD_MESSAGE_CHECK_INTERVAL_MILLIS = 1000;
   var THEME_API_NAME = 'LibraThemeDetector';
   var THEME_REPORT_DELAY_MILLIS = 180;
   var paginationLoading = false;
@@ -868,6 +870,41 @@
     return true;
   }
 
+  function mobileUnreadMessageCount() {
+    if (!window.matchMedia || !window.matchMedia(MOBILE_LAYOUT_QUERY).matches) return null;
+    var image = document.querySelector(
+      'div.navbar-end > div.relative > [role="button"] img[src*="/avatars/"]'
+    );
+    var trigger = image && image.closest('[role="button"]');
+    if (!trigger) return null;
+    var messageButton = trigger.querySelector('button');
+    if (!messageButton || (messageButton.textContent || '').indexOf('条消息') < 0) return 0;
+    var numberFlow = messageButton.querySelector('number-flow-react');
+    if (!numberFlow || !numberFlow.shadowRoot) return null;
+    var digits = numberFlow.shadowRoot.querySelectorAll('[part~="digit"]');
+    if (!digits.length) return null;
+    var value = '';
+    for (var i = 0; i < digits.length; i++) {
+      var current = digits[i].style.getPropertyValue('--current').trim();
+      if (!/^[0-9]+$/.test(current)) {
+        var activeDigit = digits[i].querySelector('.digit__num:not([inert])');
+        current = activeDigit && (activeDigit.textContent || '').trim();
+      }
+      if (!/^[0-9]+$/.test(current)) return null;
+      value += current;
+    }
+    var count = Number(value);
+    return isFinite(count) && count <= 1000000 ? count : null;
+  }
+
+  function reportUnreadMessageCount() {
+    var count = mobileUnreadMessageCount();
+    if (count === null || count === lastUnreadMessageCount) return false;
+    if (!emit('unread_message_count', { count: count })) return false;
+    lastUnreadMessageCount = count;
+    return true;
+  }
+
   function isImageUrl(url) {
     return !!url && url.protocol === 'https:' && !!url.hostname &&
       !url.username && !url.password && (!url.port || url.port === '443') && !url.hash;
@@ -1130,6 +1167,7 @@
   injectPicker();
   reportUserAvatar();
   reportUserName();
+  reportUnreadMessageCount();
   if (window.MutationObserver) {
     new MutationObserver(function () {
       updatePostNavbarVisibility();
@@ -1137,6 +1175,7 @@
       injectPicker();
       reportUserAvatar();
       reportUserName();
+      reportUnreadMessageCount();
       alignOpenUserMenu();
       schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
     }).observe(document.documentElement, {
@@ -1167,9 +1206,11 @@
   window.addEventListener('resize', function () {
     reportUserAvatar();
     reportUserName();
+    reportUnreadMessageCount();
     scheduleThemeReport(THEME_REPORT_DELAY_MILLIS);
     schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
   });
+  window.setInterval(reportUnreadMessageCount, UNREAD_MESSAGE_CHECK_INTERVAL_MILLIS);
   scheduleThemeReport(THEME_REPORT_DELAY_MILLIS);
   schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
 })();
