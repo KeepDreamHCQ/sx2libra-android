@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <bool name="libra_is_light_theme">false</bool>
+    <bool name="libra_light_system_bars">false</bool>
+</resources>

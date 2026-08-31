@@ -39,6 +39,7 @@ open class WebPageViewModel(
     // already launched. Keep that handoff consumed for later non-gesture
     // callbacks; a new explicit gesture is still allowed below.
     private var lastHandledNavigationUrl: String? = null
+    private var nextSnapshotFallbackId = 0L
 
     fun onPageStarted(url: String?) {
         val normalized = routePolicy.normalize(url)
@@ -66,6 +67,71 @@ open class WebPageViewModel(
         sessionRepository?.let { repository ->
             viewModelScope.launch { repository.refreshAuthState() }
         }
+    }
+
+    fun beginSnapshotCheck() {
+        _uiState.value = _uiState.value.copy(
+            snapshot = WebPageSnapshot.CHECKING,
+            snapshotFallbackId = null,
+        )
+    }
+
+    fun onSnapshotAvailable() {
+        _uiState.value = _uiState.value.copy(
+            snapshot = WebPageSnapshot.SHOWING,
+            snapshotFallbackId = null,
+        )
+    }
+
+    fun onSnapshotUnavailable() {
+        _uiState.value = _uiState.value.copy(
+            snapshot = WebPageSnapshot.NONE,
+            snapshotFallbackId = null,
+        )
+    }
+
+    fun onSnapshotContentCommitted() {
+        if (_uiState.value.snapshot == WebPageSnapshot.SHOWING ||
+            _uiState.value.snapshot == WebPageSnapshot.FALLBACK
+        ) {
+            _uiState.value = _uiState.value.copy(
+                snapshot = WebPageSnapshot.NONE,
+                snapshotFallbackId = null,
+            )
+        }
+    }
+
+    fun onSnapshotLoadFailed() {
+        val current = _uiState.value
+        if (current.snapshot != WebPageSnapshot.SHOWING) return
+        nextSnapshotFallbackId += 1L
+        _uiState.value = current.copy(
+            snapshot = WebPageSnapshot.FALLBACK,
+            snapshotFallbackId = nextSnapshotFallbackId,
+        )
+    }
+
+    fun onSnapshotRetry() {
+        if (_uiState.value.snapshot == WebPageSnapshot.FALLBACK) {
+            _uiState.value = _uiState.value.copy(
+                snapshot = WebPageSnapshot.SHOWING,
+                snapshotFallbackId = null,
+                error = null,
+            )
+        }
+    }
+
+    fun acknowledgeSnapshotFallback(id: Long) {
+        if (_uiState.value.snapshotFallbackId == id) {
+            _uiState.value = _uiState.value.copy(snapshotFallbackId = null)
+        }
+    }
+
+    fun disableSnapshot() {
+        _uiState.value = _uiState.value.copy(
+            snapshot = WebPageSnapshot.DISABLED,
+            snapshotFallbackId = null,
+        )
     }
 
     /**

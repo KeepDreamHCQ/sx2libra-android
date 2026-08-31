@@ -2,6 +2,7 @@ package com.suixin.sx2libra.web
 
 import com.suixin.sx2libra.model.AuthContract
 import com.suixin.sx2libra.model.MediaUrlPolicy
+import com.suixin.sx2libra.model.WebTheme
 import org.json.JSONObject
 import java.net.URI
 import java.net.URISyntaxException
@@ -351,6 +352,57 @@ object BridgeProtocol {
     }
 
     private fun Map<String, Any?>.onlyKeys(vararg allowed: String): Boolean = keys.all { it in allowed }
+}
+
+/** Strict parser for the value-only page theme channel. */
+object WebThemeProtocol {
+    const val VERSION = 1
+    const val ACTION = "theme_changed"
+    const val MAX_MESSAGE_BYTES = 512
+
+    fun isThemeMessage(rawMessage: String?): Boolean {
+        val raw = rawMessage ?: return false
+        if (!hasValidSize(raw)) return false
+        return MiniJson.parseObject(raw)?.stringField("action") == ACTION
+    }
+
+    fun parse(rawMessage: String?, source: BridgeSource): WebTheme? {
+        val raw = rawMessage ?: return null
+        if (!hasValidSize(raw)) return null
+        if (source.sourceOrigin != AuthContract.SITE_ORIGIN || !source.isMainFrame) return null
+        if (!RoutePolicy().isAllowedPageUrl(source.currentUrl)) return null
+
+        val root = MiniJson.parseObject(raw) ?: return null
+        if (!root.onlyKeys("version", "requestId", "action", "payload")) return null
+        if ((root["version"] as? Long)?.toInt() != VERSION) return null
+        if (root.stringField("action") != ACTION) return null
+        val requestId = root.stringField("requestId") ?: return null
+        if (!isCanonicalUuid(requestId)) return null
+
+        val payload = root["payload"] as? Map<*, *> ?: return null
+        @Suppress("UNCHECKED_CAST")
+        val typedPayload = payload as Map<String, Any?>
+        if (!typedPayload.onlyKeys("mode")) return null
+        return when (typedPayload.stringField("mode")) {
+            "light" -> WebTheme.LIGHT
+            "dark" -> WebTheme.DARK
+            else -> null
+        }
+    }
+
+    private fun hasValidSize(rawMessage: String?): Boolean =
+        rawMessage != null && rawMessage.length >= 2 &&
+            rawMessage.toByteArray(Charsets.UTF_8).size <= MAX_MESSAGE_BYTES
+
+    private fun isCanonicalUuid(value: String): Boolean =
+        value.matches(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}")) &&
+            runCatching { UUID.fromString(value) }.isSuccess
+
+    private fun Map<String, Any?>.stringField(name: String): String? =
+        (this[name] as? String)?.takeIf { it.isNotEmpty() && it.length <= 64 }
+
+    private fun Map<String, Any?>.onlyKeys(vararg allowed: String): Boolean =
+        keys.size == allowed.size && keys.all { it in allowed }
 }
 
 /** Small strict JSON reader so BridgeProtocol remains JVM-testable without Android's mocked org.json. */

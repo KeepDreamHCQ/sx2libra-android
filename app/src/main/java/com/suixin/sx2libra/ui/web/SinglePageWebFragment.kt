@@ -14,12 +14,13 @@ import com.suixin.sx2libra.model.AuthContract
 import com.suixin.sx2libra.model.ProtectedRootTab
 import com.suixin.sx2libra.model.WebRouteKind
 import com.suixin.sx2libra.web.LibraWebViewHost
+import com.suixin.sx2libra.web.LibraWebThemeListener
 import com.suixin.sx2libra.web.NativeActionController
 import com.suixin.sx2libra.web.NativeActionControllerRegistry
 import com.suixin.sx2libra.web.NativeActionPage
-import com.suixin.sx2libra.web.NavigationResult
 import com.suixin.sx2libra.web.PageNavigator
 import com.suixin.sx2libra.web.RoutePolicy
+import com.suixin.sx2libra.ui.theme.ThemeCoordinator
 import kotlinx.coroutines.launch
 
 /** WebView host for a protected root page such as notifications or profile. */
@@ -38,6 +39,7 @@ class SinglePageWebFragment : Fragment() {
     }
 
     private var webHost: LibraWebViewHost? = null
+    private var themeObservation: ThemeCoordinator.Observation? = null
     private var restoredWebState: Bundle? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,6 +56,9 @@ class SinglePageWebFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val container = view.findViewById<ViewGroup>(R.id.single_web_page_host)
+        themeObservation = (requireActivity().application as com.suixin.sx2libra.LibraApplication)
+            .themeCoordinator
+            .createObservation()
         val actionController: NativeActionController = NativeActionControllerRegistry.create(
             activity = requireActivity(),
             page = NativeActionPage.ORDINARY,
@@ -65,6 +70,9 @@ class SinglePageWebFragment : Fragment() {
             initialUrl = initialUrl,
             routePolicy = routePolicy,
             listener = LibraWebViewHost.listenerFor(pageViewModel),
+            themeListener = LibraWebThemeListener { _, theme ->
+                themeObservation?.report(theme)
+            },
             actionController = actionController,
         ).also { host ->
             container.addView(
@@ -87,6 +95,16 @@ class SinglePageWebFragment : Fragment() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        themeObservation?.activate()
+    }
+
+    override fun onPause() {
+        themeObservation?.deactivate()
+        super.onPause()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         val state = Bundle()
         webHost?.saveState(state)
@@ -95,26 +113,27 @@ class SinglePageWebFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        themeObservation?.close()
+        themeObservation = null
         webHost?.destroy()
         webHost = null
         super.onDestroyView()
     }
 
     private fun handleAction(action: WebPageAction) {
-        val navigator = PageNavigator()
-        val result = when (action) {
-            is WebPageAction.OpenPage -> navigator.navigate(requireContext(), action.route)
-            is WebPageAction.OpenExternal -> navigator.navigate(requireContext(), action.url)
-            is WebPageAction.SessionExpired -> navigator.navigate(
+        when (action) {
+            is WebPageAction.OpenPage -> PageNavigator().navigate(requireContext(), action.route)
+            is WebPageAction.OpenExternal -> PageNavigator().navigate(requireContext(), action.url)
+            is WebPageAction.SessionExpired -> PageNavigator().navigate(
                 requireContext(),
                 action.loginUrl,
                 protectedTabForInitialUrl(),
             )
-            is WebPageAction.Rejected -> null
+            is WebPageAction.Rejected -> Unit
         }
-        if (result == null || result is NavigationResult.Started) {
-            pageViewModel.onActionHandled(action.id)
-        }
+        // Consume the one-shot action after the navigation attempt. Otherwise
+        // returning from a child Activity replays the same pending action.
+        pageViewModel.onActionHandled(action.id)
     }
 
     private fun protectedTabForInitialUrl(): ProtectedRootTab? = when (

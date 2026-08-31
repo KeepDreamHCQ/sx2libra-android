@@ -39,4 +39,6 @@
     <string name="menu_error_order">菜单顺序无效</string>
     <string name="menu_error_storage">菜单保存失败，请稍后重试</string>
     <string name="login_unavailable">暂时无法打开登录页</string>
+    <string name="web_snapshot_fallback">页面加载失败，已展示上次内容。</string>
+    <string name="web_snapshot_retry">重新加载</string>
 </resources>

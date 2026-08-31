@@ -29,8 +29,12 @@
   var PAGINATION_PAGE_PATTERN = /^[1-9][0-9]*$/;
   var PAGINATION_CHECK_DELAY_MILLIS = 100;
   var PAGINATION_RECHECK_DELAY_MILLIS = 600;
+  var THEME_API_NAME = 'LibraThemeDetector';
+  var THEME_REPORT_DELAY_MILLIS = 180;
   var paginationLoading = false;
   var paginationCheckTimer = null;
+  var themeReportTimer = null;
+  var lastReportedTheme = null;
 
   function uuid() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -53,6 +57,28 @@
   function bridge() {
     var value = window[BRIDGE_NAME];
     return value && typeof value.postMessage === 'function' ? value : null;
+  }
+
+  function reportPageTheme() {
+    var detector = window[THEME_API_NAME];
+    if (!detector || typeof detector.detect !== 'function') return;
+    var mode;
+    try {
+      mode = detector.detect();
+    } catch (_) {
+      return;
+    }
+    if (mode !== 'dark' && mode !== 'light') return;
+    if (mode === lastReportedTheme) return;
+    if (emit('theme_changed', { mode: mode })) lastReportedTheme = mode;
+  }
+
+  function scheduleThemeReport(delay) {
+    if (themeReportTimer !== null) window.clearTimeout(themeReportTimer);
+    themeReportTimer = window.setTimeout(function () {
+      themeReportTimer = null;
+      reportPageTheme();
+    }, typeof delay === 'number' ? delay : THEME_REPORT_DELAY_MILLIS);
   }
 
   function emit(action, payload, requestIdOverride) {
@@ -1033,6 +1059,7 @@
       }
       var result = original.apply(window.history, arguments);
       updatePostNavbarVisibility();
+      scheduleThemeReport(THEME_REPORT_DELAY_MILLIS);
       schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
       return result;
     };
@@ -1040,7 +1067,10 @@
 
   interceptHistory('pushState');
   interceptHistory('replaceState');
-  window.addEventListener('popstate', updatePostNavbarVisibility);
+  window.addEventListener('popstate', function () {
+    updatePostNavbarVisibility();
+    scheduleThemeReport(THEME_REPORT_DELAY_MILLIS);
+  });
   window.addEventListener('scroll', function () {
     schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
   }, false);
@@ -1088,12 +1118,22 @@
   updatePostNavbarVisibility();
   wire(document);
   installReplyListener();
+  reportPageTheme();
+  if (document.addEventListener) {
+    document.addEventListener('DOMContentLoaded', function () {
+      scheduleThemeReport(0);
+    });
+  }
+  window.addEventListener('load', function () {
+    scheduleThemeReport(0);
+  });
   injectPicker();
   reportUserAvatar();
   reportUserName();
   if (window.MutationObserver) {
     new MutationObserver(function () {
       updatePostNavbarVisibility();
+      scheduleThemeReport(THEME_REPORT_DELAY_MILLIS);
       injectPicker();
       reportUserAvatar();
       reportUserName();
@@ -1103,13 +1143,33 @@
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['class', 'aria-expanded']
+      // alignOpenUserMenu() updates the menu's inline style. Observing every
+      // style mutation here would make that update trigger the observer again.
+      attributeFilter: ['class', 'aria-expanded', 'data-theme', 'data-color-scheme']
+    });
+
+    // Inline theme styles are relevant only on the document roots. Keep this
+    // separate from the DOM observer so menu alignment cannot form a loop.
+    new MutationObserver(function (mutations) {
+      for (var i = 0; i < mutations.length; i++) {
+        if (mutations[i].target === document.documentElement ||
+            mutations[i].target === document.body) {
+          scheduleThemeReport(THEME_REPORT_DELAY_MILLIS);
+          break;
+        }
+      }
+    }).observe(document.documentElement, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ['style']
     });
   }
   window.addEventListener('resize', function () {
     reportUserAvatar();
     reportUserName();
+    scheduleThemeReport(THEME_REPORT_DELAY_MILLIS);
     schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
   });
+  scheduleThemeReport(THEME_REPORT_DELAY_MILLIS);
   schedulePaginationCheck(PAGINATION_CHECK_DELAY_MILLIS);
 })();

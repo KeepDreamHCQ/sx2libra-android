@@ -3,6 +3,7 @@ package com.suixin.sx2libra.core
 import android.content.Context
 import com.suixin.sx2libra.data.local.ForumMenuLocalDataSource
 import com.suixin.sx2libra.data.local.ImageHostLocalDataSource
+import com.suixin.sx2libra.data.repository.WebSnapshotRepository
 import com.suixin.sx2libra.data.platform.CookieManagerWebCookieDataSource
 import com.suixin.sx2libra.data.repository.DefaultForumMenuRepository
 import com.suixin.sx2libra.data.repository.ForumMenuRepository
@@ -19,7 +20,8 @@ class AppContainer(
     private val appContext = applicationContext.applicationContext
 
     private val webCookieDataSource = CookieManagerWebCookieDataSource()
-    val webSessionRepository = WebSessionRepository(webCookieDataSource)
+    val webSnapshotRepository = WebSnapshotRepository.forCacheDirectory(appContext.cacheDir)
+    val webSessionRepository = WebSessionRepository(webCookieDataSource, webSnapshotRepository)
 
     val forumMenuDataSource = ForumMenuLocalDataSource()
     val forumMenuRepository: ForumMenuRepository = DefaultForumMenuRepository(forumMenuDataSource)

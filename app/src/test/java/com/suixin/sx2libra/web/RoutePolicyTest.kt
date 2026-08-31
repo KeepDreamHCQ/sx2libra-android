@@ -33,6 +33,28 @@ class RoutePolicyTest {
     }
 
     @Test
+    fun snapshotEligibilityIsLimitedToStablePublicPostDetails() {
+        listOf(
+            "https://2libra.com/post/workplace-stories/syA_yHM",
+            "https://2libra.com/post/android/abc",
+        ).forEach { url -> assertTrue(policy.isPostDetailSnapshotUrl(url)) }
+
+        listOf(
+            "https://2libra.com/",
+            "https://2libra.com/post/hot/today",
+            "https://2libra.com/post/latest",
+            "https://2libra.com/node/android",
+            "https://2libra.com/?p=2",
+            "https://2libra.com/#top",
+            "https://2libra.com/auth/login",
+            "https://2libra.com/user/suixin/about",
+            "https://2libra.com/post/workplace-stories/syA_yHM?commentId=9",
+            "https://2libra.com/post/workplace-stories/syA_yHM#reply",
+            "https://example.com/",
+        ).forEach { url -> assertFalse(policy.isPostDetailSnapshotUrl(url)) }
+    }
+
+    @Test
     fun rejectsUnsupportedTopLevelSchemesAndForgedHosts() {
         assertEquals(WebRouteKind.INVALID, policy.classify("http://2libra.com/").kind)
         assertEquals(WebRouteKind.INVALID, policy.classify("file:///tmp/page").kind)

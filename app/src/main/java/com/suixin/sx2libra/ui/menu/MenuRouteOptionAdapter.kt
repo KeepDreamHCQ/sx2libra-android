@@ -42,11 +42,11 @@ class MenuRouteOptionAdapter(
                 route.path.contains(query, ignoreCase = true)
         }
         items.clear()
+        items += Item.Custom
         if (filteredRoutes.isEmpty() && query.isNotEmpty()) {
             items += Item.Status(context.getString(R.string.menu_route_search_empty))
         }
         items += filteredRoutes.map(Item::Route)
-        items += Item.Custom
         notifyDataSetChanged()
     }
 

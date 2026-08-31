@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="libra_primary">#FFA78BFA</color>
+    <color name="libra_primary_pressed">#FF8B5CF6</color>
+    <color name="libra_secondary">#FFF472B6</color>
+    <color name="libra_accent">#FF2DD4BF</color>
+    <color name="libra_error">#FFFB7185</color>
+    <color name="on_primary">#FF18181B</color>
+    <color name="on_secondary">#FF18181B</color>
+    <color name="control_highlight">#14FFFFFF</color>
+
+    <color name="surface_background">#FF121214</color>
+    <color name="surface_subtle">#FF1B1B1F</color>
+    <color name="surface_pressed">#FF2A2A30</color>
+    <color name="navigation_background">#FF18181B</color>
+    <color name="text_primary">#FFF4F4F5</color>
+    <color name="text_secondary">#FFA1A1AA</color>
+    <color name="icon_primary">#FFD4D4D8</color>
+    <color name="divider">#FF3F3F46</color>
+    <color name="nav_item_selected_content">#FFF4F4F5</color>
+    <color name="nav_item_unselected_content">#FFA1A1AA</color>
+    <color name="tab_selected">#FFF4F4F5</color>
+    <color name="tab_unselected">#FFA1A1AA</color>
+    <color name="dialog_surface">#FF1F1F23</color>
+</resources>

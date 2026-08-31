@@ -2,6 +2,7 @@ package com.suixin.sx2libra.ui.menu
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.text.InputFilter
 import android.view.LayoutInflater
@@ -25,7 +26,13 @@ import com.suixin.sx2libra.R
 import com.suixin.sx2libra.model.ImageHost
 import com.suixin.sx2libra.ui.system.applySystemBarInsets
 import com.suixin.sx2libra.ui.system.enableImmersiveSystemBars
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MenuSettingsActivity : AppCompatActivity() {
     private val viewModel: MenuSettingsViewModel by viewModels {
@@ -38,6 +45,7 @@ class MenuSettingsActivity : AppCompatActivity() {
     private var routeOptionAdapter: MenuRouteOptionAdapter? = null
     private var lastPendingDeleteRequest: String? = null
     private var lastError: MenuSettingsError? = null
+    private var isCheckingForUpdate = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +53,12 @@ class MenuSettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_menu_settings)
         findViewById<View>(R.id.menu_settings_root).applySystemBarInsets(top = true)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+
+        findViewById<View>(R.id.llGithub).setOnClickListener {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_URL)))
+        }
+        findViewById<View>(R.id.llVersion).setOnClickListener { checkForUpdate() }
+        findViewById<TextView>(R.id.tvVersion).text = currentVersionName()
 
         val list = findViewById<RecyclerView>(R.id.menu_list)
         list.applySystemBarInsets(bottom = true)
@@ -127,6 +141,101 @@ class MenuSettingsActivity : AppCompatActivity() {
             lastError = null
         }
     }
+
+    private fun checkForUpdate() {
+        if (isCheckingForUpdate) return
+        isCheckingForUpdate = true
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { fetchLatestRelease() }
+            isCheckingForUpdate = false
+
+            if (isFinishing || isDestroyed) return@launch
+            result.fold(
+                onSuccess = { release ->
+                    val localVersion = currentVersionName()
+                    if (compareVersions(release.version, localVersion) > 0) {
+                        MaterialAlertDialogBuilder(
+                            this@MenuSettingsActivity,
+                            R.style.ThemeOverlay_Sx2libra_MaterialAlertDialog,
+                        )
+                            .setTitle("发现新版本")
+                            .setMessage(
+                                "当前版本 $localVersion，最新版本 " +
+                                    "${release.version.removePrefix("v")}，是否前往 GitHub 更新？",
+                            )
+                            .setNegativeButton(android.R.string.cancel, null)
+                            .setPositiveButton("前往 GitHub") { _, _ ->
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.url)))
+                            }
+                            .show()
+                    } else {
+                        Toast.makeText(this@MenuSettingsActivity, "当前已经是最新版本", Toast.LENGTH_SHORT)
+                            .show()
+                    }
+                },
+                onFailure = {
+                    Toast.makeText(
+                        this@MenuSettingsActivity,
+                        "检查更新失败，请稍后重试",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                },
+            )
+        }
+    }
+
+    private fun currentVersionName(): String =
+        packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+
+    private fun fetchLatestRelease(): Result<GitHubRelease> = runCatching {
+        val connection = (URL(GITHUB_LATEST_RELEASE_URL).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 10_000
+            readTimeout = 10_000
+            setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("User-Agent", "sx2libra-android")
+        }
+        try {
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                throw IOException("GitHub API response: ${connection.responseCode}")
+            }
+            val response = connection.inputStream.bufferedReader().use { it.readText() }
+            val json = JSONObject(response)
+            val tagName = json.optString("tag_name").takeIf { it.isNotBlank() }
+                ?: throw IOException("GitHub release tag is missing")
+            if (parseVersion(tagName).isEmpty()) {
+                throw IOException("GitHub release tag is invalid")
+            }
+            GitHubRelease(
+                version = tagName,
+                url = json.optString("html_url").ifBlank { GITHUB_URL },
+            )
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun compareVersions(left: String, right: String): Int {
+        val leftParts = parseVersion(left)
+        val rightParts = parseVersion(right)
+        val partCount = maxOf(leftParts.size, rightParts.size)
+        for (index in 0 until partCount) {
+            val comparison = (leftParts.getOrNull(index) ?: 0)
+                .compareTo(rightParts.getOrNull(index) ?: 0)
+            if (comparison != 0) return comparison
+        }
+        return 0
+    }
+
+    private fun parseVersion(version: String): List<Int> {
+        val numericVersion = Regex("\\d+(?:\\.\\d+)*").find(version)?.value ?: return emptyList()
+        return numericVersion.split('.').map(String::toInt)
+    }
+
+    private data class GitHubRelease(
+        val version: String,
+        val url: String,
+    )
 
     private fun showRouteSelectionDialog() {
         if (routePickerDialog?.isShowing == true) return
@@ -227,6 +336,9 @@ class MenuSettingsActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_REVISION = "forum_menu_revision"
+        private const val GITHUB_URL = "https://github.com/KeepDreamHCQ/sx2libra-android"
+        private const val GITHUB_LATEST_RELEASE_URL =
+            "https://api.github.com/repos/KeepDreamHCQ/sx2libra-android/releases/latest"
     }
 }
 

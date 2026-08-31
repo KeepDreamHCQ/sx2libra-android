@@ -16,6 +16,9 @@ interface LibraWebViewClientListener {
         hasUserGesture: Boolean,
     )
 
+    /** Visual first-paint signal kept separate from semantic route handling. */
+    fun onPageCommitVisible(url: String?) {}
+
     fun onPageStarted(url: String?) {}
 
     fun onPageCommitted(url: String?) {}
@@ -94,6 +97,8 @@ class LibraWebViewClient(
     }
 
     override fun onPageCommitVisible(view: WebView, url: String) {
+        listener.onPageCommitVisible(url)
+        // Keep the existing route/POST redirect callback for navigation policy.
         listener.onPageCommitted(url)
     }
 

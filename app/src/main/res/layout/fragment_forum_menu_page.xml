@@ -8,4 +8,15 @@
         android:id="@+id/menu_page_web_host"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <TextView
+        android:id="@+id/menu_page_error"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:padding="24dp"
+        android:text="@string/web_page_load_error"
+        android:textAppearance="@style/TextAppearance.Sx2libra.Error"
+        android:visibility="gone" />
 </FrameLayout>

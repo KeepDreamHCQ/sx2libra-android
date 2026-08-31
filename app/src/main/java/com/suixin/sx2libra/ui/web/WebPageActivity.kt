@@ -6,11 +6,12 @@ import android.view.View
 import android.webkit.WebView
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.fragment.app.FragmentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.suixin.sx2libra.R
+import com.suixin.sx2libra.LibraApplication
 import com.suixin.sx2libra.data.repository.WebSessionRepositoryResolver
 import com.suixin.sx2libra.model.AuthContract
 import com.suixin.sx2libra.model.WebRoute
@@ -21,13 +22,16 @@ import com.suixin.sx2libra.web.LibraWebViewClient
 import com.suixin.sx2libra.web.LibraWebViewClientListener
 import com.suixin.sx2libra.web.LibraWebViewFactory
 import com.suixin.sx2libra.web.LibraWebViewRefreshLayout
+import com.suixin.sx2libra.web.LibraWebThemeListener
 import com.suixin.sx2libra.web.NativeActionController
 import com.suixin.sx2libra.web.NativeActionControllerRegistry
 import com.suixin.sx2libra.web.NativeActionPage
 import com.suixin.sx2libra.web.PageNavigator
 import com.suixin.sx2libra.web.RoutePolicy
+import com.suixin.sx2libra.web.WebThemeDetector
 import com.suixin.sx2libra.ui.system.applySystemBarInsets
 import com.suixin.sx2libra.ui.system.enableImmersiveSystemBars
+import com.suixin.sx2libra.ui.theme.ThemeCoordinator
 import kotlinx.coroutines.launch
 
 /**
@@ -35,7 +39,7 @@ import kotlinx.coroutines.launch
  * WebView; other child business navigation becomes a new Activity action and
  * valid post-list pagination remains in the current WebView.
  */
-open class WebPageActivity : FragmentActivity() {
+open class WebPageActivity : AppCompatActivity() {
     protected val routePolicy = RoutePolicy()
     private val sessionRepository by lazy { WebSessionRepositoryResolver.resolve(this) }
 
@@ -47,6 +51,8 @@ open class WebPageActivity : FragmentActivity() {
     private lateinit var webViewFactory: LibraWebViewFactory
     private lateinit var initialUrl: String
     private lateinit var nativeActionController: NativeActionController
+    private lateinit var themeObservation: ThemeCoordinator.Observation
+    private lateinit var themeDetector: WebThemeDetector
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,6 +65,7 @@ open class WebPageActivity : FragmentActivity() {
             return
         }
         initialUrl = route.url
+        themeObservation = (application as LibraApplication).themeCoordinator.createObservation()
 
         setContentView(R.layout.activity_web_page)
         findViewById<View>(R.id.web_page_root).applySystemBarInsets(top = true)
@@ -86,7 +93,14 @@ open class WebPageActivity : FragmentActivity() {
             routePolicy = routePolicy,
         )
         nativeActionController.bind(webView)
-        webViewFactory.installBridge(webView, nativeActionController.messageListener())
+        themeDetector = WebThemeDetector(this, routePolicy) { theme ->
+            themeObservation.report(theme)
+        }
+        webViewFactory.installBridge(
+            webView,
+            nativeActionController.messageListener(),
+            LibraWebThemeListener { _, theme -> themeObservation.report(theme) },
+        )
         webView.webViewClient = LibraWebViewClient(
             initialUrl,
             routePolicy,
@@ -105,6 +119,7 @@ open class WebPageActivity : FragmentActivity() {
                 override fun onPageFinished(url: String?) {
                     refreshLayout.stopRefreshing()
                     viewModel.onPageFinished(url)
+                    themeDetector.inspect(webView)
                 }
                 override fun onLoadingError(isMainFrame: Boolean, errorCode: Int, description: String?) {
                     if (isMainFrame) {
@@ -138,6 +153,16 @@ open class WebPageActivity : FragmentActivity() {
         collectState()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::themeObservation.isInitialized) themeObservation.activate()
+    }
+
+    override fun onPause() {
+        if (::themeObservation.isInitialized) themeObservation.deactivate()
+        super.onPause()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         if (::webView.isInitialized) webView.saveState(outState)
         super.onSaveInstanceState(outState)
@@ -150,6 +175,7 @@ open class WebPageActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        if (::themeObservation.isInitialized) themeObservation.close()
         if (::nativeActionController.isInitialized) nativeActionController.onDestroy()
         if (::webView.isInitialized) webViewFactory.destroy(webView)
         super.onDestroy()

@@ -6,11 +6,12 @@ import android.view.View
 import android.webkit.WebView
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.suixin.sx2libra.R
+import com.suixin.sx2libra.LibraApplication
 import com.suixin.sx2libra.data.repository.WebSessionRepositoryResolver
 import com.suixin.sx2libra.model.AuthContract
 import com.suixin.sx2libra.web.LibraWebChromeClient
@@ -19,13 +20,16 @@ import com.suixin.sx2libra.web.LibraWebViewClient
 import com.suixin.sx2libra.web.LibraWebViewClientListener
 import com.suixin.sx2libra.web.LibraWebViewFactory
 import com.suixin.sx2libra.web.LibraWebViewRefreshLayout
+import com.suixin.sx2libra.web.LibraWebThemeListener
 import com.suixin.sx2libra.web.RoutePolicy
+import com.suixin.sx2libra.web.WebThemeDetector
 import com.suixin.sx2libra.ui.system.applySystemBarInsets
 import com.suixin.sx2libra.ui.system.enableImmersiveSystemBars
+import com.suixin.sx2libra.ui.theme.ThemeCoordinator
 import kotlinx.coroutines.launch
 
 /** Isolated login page.  The only top-level load is the validated login URL. */
-class LoginActivity : ComponentActivity() {
+class LoginActivity : AppCompatActivity() {
     private val routePolicy = RoutePolicy()
     private val sessionRepository by lazy { WebSessionRepositoryResolver.resolve(this) }
 
@@ -37,6 +41,8 @@ class LoginActivity : ComponentActivity() {
     private lateinit var factory: LibraWebViewFactory
     private var initialUrl: String = AuthContract.LOGIN_URL
     private var resultSent = false
+    private lateinit var themeObservation: ThemeCoordinator.Observation
+    private lateinit var themeDetector: WebThemeDetector
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +56,7 @@ class LoginActivity : ComponentActivity() {
             return
         }
         initialUrl = route.url
+        themeObservation = (application as LibraApplication).themeCoordinator.createObservation()
         setContentView(R.layout.activity_auth_login)
         findViewById<View>(R.id.auth_login_root).applySystemBarInsets(top = true)
         refreshLayout = findViewById(R.id.auth_login_refresh)
@@ -67,6 +74,9 @@ class LoginActivity : ComponentActivity() {
         // Reuse the view supplied by the layout while applying the same secure
         // settings/profile as all other page hosts.
         factory.configure(webView)
+        themeDetector = WebThemeDetector(this, routePolicy) { theme ->
+            themeObservation.report(theme)
+        }
         webView.webViewClient = LibraWebViewClient(
             initialUrl,
             routePolicy,
@@ -88,6 +98,7 @@ class LoginActivity : ComponentActivity() {
                 override fun onPageFinished(url: String?) {
                     refreshLayout.stopRefreshing()
                     viewModel.onPageFinished(url)
+                    themeDetector.inspect(webView)
                 }
                 override fun onLoadingError(isMainFrame: Boolean, errorCode: Int, description: String?) {
                     if (isMainFrame) {
@@ -105,12 +116,26 @@ class LoginActivity : ComponentActivity() {
         webView.webChromeClient = LibraWebChromeClient(object : LibraWebChromeClientListener {
             override fun onProgressChanged(progress: Int) = viewModel.onProgressChanged(progress)
         })
-        factory.installBridge(webView, null)
+        factory.installBridge(
+            webView,
+            null,
+            LibraWebThemeListener { _, theme -> themeObservation.report(theme) },
+        )
 
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
             webView.loadUrl(initialUrl)
         }
         collectState()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::themeObservation.isInitialized) themeObservation.activate()
+    }
+
+    override fun onPause() {
+        if (::themeObservation.isInitialized) themeObservation.deactivate()
+        super.onPause()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -126,6 +151,7 @@ class LoginActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        if (::themeObservation.isInitialized) themeObservation.close()
         if (::webView.isInitialized) {
             factory.destroy(webView)
         }

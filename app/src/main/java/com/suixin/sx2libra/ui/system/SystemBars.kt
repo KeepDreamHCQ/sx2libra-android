@@ -1,6 +1,7 @@
 package com.suixin.sx2libra.ui.system
 
 import android.app.Activity
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
 import android.view.View
@@ -11,7 +12,7 @@ import androidx.core.view.updatePadding
 
 /** Enables edge-to-edge rendering while keeping system bar icons readable. */
 fun Activity.enableImmersiveSystemBars(
-    lightStatusBars: Boolean = true,
+    lightStatusBars: Boolean = !isNightModeActive(),
     lightNavigationBars: Boolean = lightStatusBars,
 ) {
     WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -26,6 +27,10 @@ fun Activity.enableImmersiveSystemBars(
         isAppearanceLightNavigationBars = lightNavigationBars
     }
 }
+
+private fun Activity.isNightModeActive(): Boolean =
+    (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+        Configuration.UI_MODE_NIGHT_YES
 
 /** Applies system-bar and IME insets on top of the view's XML/programmatic padding. */
 fun View.applySystemBarInsets(

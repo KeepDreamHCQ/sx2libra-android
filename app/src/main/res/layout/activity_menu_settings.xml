@@ -21,7 +21,6 @@
             android:text="@string/menu_settings_title"
             android:textAppearance="@style/TextAppearance.Sx2libra.ToolbarTitle" />
     </LinearLayout>
-
     <LinearLayout
         android:id="@+id/image_host_setting"
         android:layout_width="match_parent"
@@ -50,6 +49,67 @@
             android:layout_height="wrap_content"
             android:textAppearance="@style/TextAppearance.Sx2libra.Secondary" />
     </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/llVersion"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="56dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_forum_menu_item"
+        android:foreground="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="版本"
+            android:textAppearance="@style/TextAppearance.Sx2libra.Body" />
+
+        <TextView
+            android:id="@+id/tvVersion"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:layout_marginLeft="20dp"
+            android:ellipsize="start"
+            android:textAppearance="@style/TextAppearance.Sx2libra.Secondary" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/llGithub"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="56dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_forum_menu_item"
+        android:foreground="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Github地址"
+            android:textAppearance="@style/TextAppearance.Sx2libra.Body" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:layout_marginLeft="20dp"
+            android:ellipsize="start"
+            android:text="https://github.com/KeepDreamHCQ/sx2libra-android"
+            android:textAppearance="@style/TextAppearance.Sx2libra.Secondary" />
+    </LinearLayout>
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
@@ -62,7 +122,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Tab源"
+            android:text="Tabs"
             android:textAppearance="@style/TextAppearance.Sx2libra.ToolbarTitle" />
 
         <androidx.appcompat.widget.AppCompatImageButton

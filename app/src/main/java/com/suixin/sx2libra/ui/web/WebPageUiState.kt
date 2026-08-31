@@ -10,6 +10,15 @@ enum class WebPageError {
     RENDERER_GONE,
 }
 
+/** Visual state of the optional non-interactive page snapshot overlay. */
+enum class WebPageSnapshot {
+    DISABLED,
+    CHECKING,
+    NONE,
+    SHOWING,
+    FALLBACK,
+}
+
 sealed interface WebPageAction {
     val id: String
 
@@ -45,4 +54,6 @@ data class WebPageUiState(
     val progress: Int = 0,
     val error: WebPageError? = null,
     val pendingAction: WebPageAction? = null,
+    val snapshot: WebPageSnapshot = WebPageSnapshot.DISABLED,
+    val snapshotFallbackId: Long? = null,
 )

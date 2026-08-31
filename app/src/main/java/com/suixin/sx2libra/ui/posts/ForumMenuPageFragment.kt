@@ -4,22 +4,26 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.suixin.sx2libra.LibraApplication
 import com.suixin.sx2libra.R
-import com.suixin.sx2libra.model.ForumMenu
+import com.suixin.sx2libra.data.repository.WebSessionRepositoryContract
 import com.suixin.sx2libra.data.repository.WebSessionRepositoryResolver
+import com.suixin.sx2libra.model.ForumMenu
 import com.suixin.sx2libra.ui.web.WebPageAction
 import com.suixin.sx2libra.ui.web.WebPageViewModel
 import com.suixin.sx2libra.web.LibraWebViewHost
+import com.suixin.sx2libra.web.LibraWebThemeListener
 import com.suixin.sx2libra.web.NativeActionController
 import com.suixin.sx2libra.web.NativeActionControllerRegistry
 import com.suixin.sx2libra.web.NativeActionPage
-import com.suixin.sx2libra.web.NavigationResult
 import com.suixin.sx2libra.web.PageNavigator
 import com.suixin.sx2libra.web.RoutePolicy
+import com.suixin.sx2libra.ui.theme.ThemeCoordinator
 import kotlinx.coroutines.launch
 
 /**
@@ -39,16 +43,22 @@ class ForumMenuPageFragment : Fragment() {
         )
     }
 
+    private val sessionRepository: WebSessionRepositoryContract by lazy {
+        WebSessionRepositoryResolver.resolve(requireContext())
+    }
+
     private val pageViewModel: WebPageViewModel by viewModels {
         WebPageViewModel.Factory(
             menu.url,
             routePolicy,
-            WebSessionRepositoryResolver.resolve(requireContext()),
+            sessionRepository,
         )
     }
 
     private var webHost: LibraWebViewHost? = null
+    private var themeObservation: ThemeCoordinator.Observation? = null
     private var restoredWebState: Bundle? = null
+    private lateinit var errorText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,6 +76,10 @@ class ForumMenuPageFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val hostContainer = view.findViewById<ViewGroup>(R.id.menu_page_web_host)
+        errorText = view.findViewById(R.id.menu_page_error)
+        themeObservation = (requireActivity().application as LibraApplication)
+            .themeCoordinator
+            .createObservation()
         val actionController: NativeActionController = NativeActionControllerRegistry.create(
             activity = requireActivity(),
             page = if (routePolicy.isPostComposerUrl(menu.url)) {
@@ -80,7 +94,10 @@ class ForumMenuPageFragment : Fragment() {
             context = requireContext(),
             initialUrl = menu.url,
             routePolicy = routePolicy,
-            listener = LibraWebViewHost.listenerFor(pageViewModel),
+            listener = LibraWebViewHost.listenerFor(viewModel = pageViewModel),
+            themeListener = LibraWebThemeListener { _, theme ->
+                themeObservation?.report(theme)
+            },
             actionController = actionController,
         ).also { host ->
             hostContainer.addView(
@@ -90,17 +107,28 @@ class ForumMenuPageFragment : Fragment() {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 ),
             )
-            host.start(restoredWebState)
-            restoredWebState = null
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 pageViewModel.uiState.collect { state ->
+                    errorText.visibility = if (state.error == null) View.GONE else View.VISIBLE
+                    errorText.text = getString(R.string.web_page_load_error)
                     state.pendingAction?.let(::handleAction)
                 }
             }
         }
+        startWebHost(restoredWebState).also { restoredWebState = null }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        themeObservation?.activate()
+    }
+
+    override fun onPause() {
+        themeObservation?.deactivate()
+        super.onPause()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -111,9 +139,16 @@ class ForumMenuPageFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        themeObservation?.close()
+        themeObservation = null
         webHost?.destroy()
         webHost = null
         super.onDestroyView()
+    }
+
+    private fun startWebHost(savedState: Bundle?) {
+        val host = webHost ?: return
+        host.start(savedState)
     }
 
     fun toggleCurrentUserMenu() {
@@ -141,15 +176,15 @@ class ForumMenuPageFragment : Fragment() {
     }
 
     private fun handleAction(action: WebPageAction) {
-        val result = when (action) {
+        when (action) {
             is WebPageAction.OpenPage -> PageNavigator().navigate(requireContext(), action.route)
             is WebPageAction.OpenExternal -> PageNavigator().navigate(requireContext(), action.url)
             is WebPageAction.SessionExpired -> PageNavigator().navigate(requireContext(), action.loginUrl)
-            is WebPageAction.Rejected -> null
+            is WebPageAction.Rejected -> Unit
         }
-        if (result == null || result is NavigationResult.Started) {
-            pageViewModel.onActionHandled(action.id)
-        }
+        // Consume the one-shot action after the navigation attempt. Otherwise
+        // returning from a child Activity replays the same pending action.
+        pageViewModel.onActionHandled(action.id)
     }
 
     companion object {

@@ -18,6 +18,7 @@ class LibraWebViewHost(
     listener: LibraWebViewClientListener,
     chromeListener: LibraWebChromeClientListener? = null,
     messageListener: LibraWebMessageListener? = null,
+    themeListener: LibraWebThemeListener? = null,
     private val actionController: NativeActionController? = null,
 ) : LibraWebViewRefreshLayout(context) {
     private val factory = LibraWebViewFactory(routePolicy)
@@ -26,7 +27,13 @@ class LibraWebViewHost(
     private val webView: WebView = factory.create(
         context,
         actionController?.messageListener() ?: messageListener,
+        themeListener,
     )
+    private val themeDetector = themeListener?.let { listener ->
+        WebThemeDetector(context, routePolicy) { theme ->
+            listener.onThemeChanged(webView, theme)
+        }
+    }
     private var started = false
     private var destroyed = false
 
@@ -59,6 +66,8 @@ class LibraWebViewHost(
             delegate.onMainFrameNavigationRequested(route, isRedirect, hasUserGesture)
         }
 
+        override fun onPageCommitVisible(url: String?) = delegate.onPageCommitVisible(url)
+
         override fun onPageStarted(url: String?) = delegate.onPageStarted(url)
 
         override fun onPageCommitted(url: String?) = delegate.onPageCommitted(url)
@@ -66,6 +75,7 @@ class LibraWebViewHost(
         override fun onPageFinished(url: String?) {
             stopRefreshing()
             delegate.onPageFinished(url)
+            themeDetector?.inspect(webView)
         }
 
         override fun onLoadingError(
@@ -122,8 +132,11 @@ class LibraWebViewHost(
 
     companion object {
         /** Convenience adapter used by page fragments with a WebPageViewModel. */
-        fun listenerFor(viewModel: WebPageViewModel): LibraWebViewClientListener =
-            ViewModelWebViewClientListener(viewModel)
+        fun listenerFor(
+            viewModel: WebPageViewModel,
+        ): LibraWebViewClientListener = ViewModelWebViewClientListener(
+            viewModel,
+        )
 
         fun chromeListenerFor(viewModel: WebPageViewModel): LibraWebChromeClientListener =
             ViewModelWebChromeClientListener(viewModel)
@@ -148,15 +161,23 @@ private class ViewModelWebViewClientListener(
 
     override fun onPageCommitted(url: String?) = viewModel.onPageCommitted(url)
 
-    override fun onPageFinished(url: String?) = viewModel.onPageFinished(url)
-
-    override fun onLoadingError(isMainFrame: Boolean, errorCode: Int, description: String?) {
-        if (isMainFrame) viewModel.onError(WebPageError.NETWORK_ERROR)
+    override fun onPageFinished(url: String?) {
+        viewModel.onPageFinished(url)
     }
 
-    override fun onSslError() = viewModel.onError(WebPageError.SSL_ERROR)
+    override fun onLoadingError(isMainFrame: Boolean, errorCode: Int, description: String?) {
+        if (isMainFrame) {
+            viewModel.onError(WebPageError.NETWORK_ERROR)
+        }
+    }
 
-    override fun onRendererGone() = viewModel.onError(WebPageError.RENDERER_GONE)
+    override fun onSslError() {
+        viewModel.onError(WebPageError.SSL_ERROR)
+    }
+
+    override fun onRendererGone() {
+        viewModel.onError(WebPageError.RENDERER_GONE)
+    }
 }
 
 private class ViewModelWebChromeClientListener(

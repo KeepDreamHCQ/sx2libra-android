@@ -2,6 +2,7 @@ package com.suixin.sx2libra.web
 
 import com.suixin.sx2libra.model.WebRouteKind
 import com.suixin.sx2libra.ui.web.WebPageAction
+import com.suixin.sx2libra.ui.web.WebPageSnapshot
 import com.suixin.sx2libra.ui.web.WebPageViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -119,5 +120,37 @@ class WebPageViewModelTest {
         viewModel.onNavigationRequested("http://2libra.com/")
         assertTrue(viewModel.uiState.value.pendingAction is WebPageAction.Rejected)
         assertFalse(viewModel.uiState.value.pendingAction is WebPageAction.OpenPage)
+    }
+
+    @Test
+    fun snapshotStateKeepsFallbackUntilRetryAndHidesAfterSuccessfulCommit() {
+        val viewModel = WebPageViewModel("https://2libra.com/")
+
+        viewModel.beginSnapshotCheck()
+        assertEquals(WebPageSnapshot.CHECKING, viewModel.uiState.value.snapshot)
+        viewModel.onSnapshotAvailable()
+        assertEquals(WebPageSnapshot.SHOWING, viewModel.uiState.value.snapshot)
+
+        viewModel.onSnapshotLoadFailed()
+        val fallbackId = viewModel.uiState.value.snapshotFallbackId
+        assertEquals(WebPageSnapshot.FALLBACK, viewModel.uiState.value.snapshot)
+        assertNotNull(fallbackId)
+
+        viewModel.onSnapshotContentCommitted()
+        assertEquals(WebPageSnapshot.NONE, viewModel.uiState.value.snapshot)
+        assertNull(viewModel.uiState.value.snapshotFallbackId)
+
+        viewModel.onSnapshotAvailable()
+        viewModel.onSnapshotLoadFailed()
+        val retryFallbackId = viewModel.uiState.value.snapshotFallbackId
+        assertEquals(WebPageSnapshot.FALLBACK, viewModel.uiState.value.snapshot)
+        assertNotNull(retryFallbackId)
+        viewModel.acknowledgeSnapshotFallback(requireNotNull(retryFallbackId))
+        assertNull(viewModel.uiState.value.snapshotFallbackId)
+
+        viewModel.onSnapshotRetry()
+        assertEquals(WebPageSnapshot.SHOWING, viewModel.uiState.value.snapshot)
+        viewModel.onSnapshotContentCommitted()
+        assertEquals(WebPageSnapshot.NONE, viewModel.uiState.value.snapshot)
     }
 }

@@ -1,26 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Sx2libra" parent="Theme.MaterialComponents.Light.NoActionBar">
+    <style name="Theme.Sx2libra" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:windowBackground">@color/surface_background</item>
         <item name="android:colorAccent">@color/libra_primary</item>
         <item name="colorPrimary">@color/libra_primary</item>
         <item name="colorPrimaryVariant">@color/libra_primary_pressed</item>
-        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorOnPrimary">@color/on_primary</item>
         <item name="colorSecondary">@color/libra_secondary</item>
-        <item name="colorOnSecondary">@color/text_primary</item>
+        <item name="colorOnSecondary">@color/on_secondary</item>
         <item name="colorSurface">@color/surface_background</item>
         <item name="colorOnSurface">@color/text_primary</item>
         <item name="colorError">@color/libra_error</item>
         <item name="colorControlNormal">@color/text_secondary</item>
         <item name="colorControlActivated">@color/libra_primary</item>
-        <item name="colorControlHighlight">#1424222A</item>
+        <item name="colorControlHighlight">@color/control_highlight</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.Sx2libra.MaterialAlertDialog</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLightStatusBar">@bool/libra_light_system_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/libra_light_system_bars</item>
     </style>
 </resources>

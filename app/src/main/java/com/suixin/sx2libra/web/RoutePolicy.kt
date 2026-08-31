@@ -193,6 +193,18 @@ class RoutePolicy(
     /** Site-host check for Bridge actions that need to accept only same-origin URLs. */
     fun isTrustedSiteUrl(rawUrl: String?): Boolean = parseSite(rawUrl) != null
 
+    /**
+     * Snapshot eligibility for public, stable post detail pages only. Login,
+     * profile, composer, list, and query/fragment URLs are deliberately
+     * excluded because their rendered content can be session- or
+     * viewport-specific.
+     */
+    fun isPostDetailSnapshotUrl(rawUrl: String?): Boolean {
+        val parsed = parseSite(rawUrl) ?: return false
+        if (parsed.uri.rawQuery != null || parsed.uri.rawFragment != null) return false
+        return isPostDetailPath(parsed)
+    }
+
     private fun parseSite(rawUrl: String?): ParsedUrl? {
         val parsed = parse(rawUrl ?: return null) ?: return null
         return if (
@@ -225,6 +237,11 @@ class RoutePolicy(
             path == "/post/hot/recent" ||
             path == "/post/latest" ||
             path.startsWith("/node/")
+
+    private fun isPostDetailPath(parsed: ParsedUrl): Boolean =
+        parsed.decodedSegments.size == 3 &&
+            parsed.decodedSegments[0] == "post" &&
+            !isPostListPath(parsed.path)
 
     private fun paginationPage(parsed: ParsedUrl): String? {
         val rawQuery = parsed.uri.rawQuery ?: return "1"
