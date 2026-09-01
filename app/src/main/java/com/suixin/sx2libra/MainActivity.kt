@@ -15,6 +15,7 @@ import com.google.android.material.badge.BadgeDrawable
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.suixin.sx2libra.data.repository.UnreadMessageState
 import com.suixin.sx2libra.data.repository.UnreadMessageStore
+import com.suixin.sx2libra.data.repository.UserAvatarStore
 import com.suixin.sx2libra.data.repository.UserNameStore
 import com.suixin.sx2libra.model.AuthContract
 import com.suixin.sx2libra.model.ProtectedRootTab
@@ -24,6 +25,7 @@ import com.suixin.sx2libra.ui.posts.PostsFragment
 import com.suixin.sx2libra.ui.web.SinglePageWebFragment
 import com.suixin.sx2libra.ui.system.applySystemBarInsets
 import com.suixin.sx2libra.ui.system.enableImmersiveSystemBars
+import com.suixin.sx2libra.web.PageNavigator
 import kotlinx.coroutines.launch
 
 /** Root shell: bottom navigation is click-only; only PostsFragment owns a pager. */
@@ -50,14 +52,10 @@ class MainActivity : AppCompatActivity() {
         }
         bottomNavigation.setOnItemSelectedListener { item ->
             if (rendering) return@setOnItemSelectedListener true
-            MainRootTab.fromItemId(item.itemId)?.let { target ->
-                viewModel.onRootTabSelected(target)
-                if (target == MainRootTab.MESSAGES) UnreadMessageStore.markRead()
-            }
-            true
+            MainRootTab.fromItemId(item.itemId)?.let(::selectRootTab) ?: false
         }
         bottomNavigation.setOnItemReselectedListener { item ->
-            if (item.itemId == R.id.nav_posts) viewModel.onRootTabSelected(MainRootTab.POSTS)
+            if (!rendering) MainRootTab.fromItemId(item.itemId)?.let(::selectRootTab)
         }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -107,6 +105,32 @@ class MainActivity : AppCompatActivity() {
         messagesBadge.isVisible = viewModel.uiState.value.selectedTab != MainRootTab.MESSAGES &&
             state.hasUnacknowledgedMessages
     }
+
+    private fun selectRootTab(target: MainRootTab): Boolean {
+        if (target != MainRootTab.POSTS && !hasUserIdentity()) {
+            PageNavigator().navigate(
+                this,
+                AuthContract.LOGIN_URL,
+                target.protectedTab,
+            )
+            return false
+        }
+
+        viewModel.onRootTabSelected(target)
+        if (target == MainRootTab.MESSAGES) UnreadMessageStore.markRead()
+        return true
+    }
+
+    private fun hasUserIdentity(): Boolean =
+        !UserAvatarStore.avatarUrl.value.isNullOrBlank() &&
+            !UserNameStore.username.value.isNullOrBlank()
+
+    private val MainRootTab.protectedTab: ProtectedRootTab?
+        get() = when (this) {
+            MainRootTab.MESSAGES -> ProtectedRootTab.NOTIFICATIONS
+            MainRootTab.PROFILE -> ProtectedRootTab.PROFILE
+            MainRootTab.POSTS -> null
+        }
 
     private fun showRoot(tab: MainRootTab) {
         val tag = tab.name

@@ -12,6 +12,11 @@
     <string name="menu_settings_title">设置</string>
     <string name="image_host_title">图床源</string>
     <string name="image_host_dialog_title">选择图床源</string>
+    <string name="image_cache_title">图片缓存</string>
+    <string name="image_cache_clear_title">清除图片缓存</string>
+    <string name="image_cache_clear_message">确定清除本地图片缓存吗？</string>
+    <string name="image_cache_clear_confirm">清除</string>
+    <string name="image_cache_error_storage">图片缓存清除失败，请稍后重试</string>
     <string name="image_upload_succeeded">图片上传成功</string>
     <string name="image_upload_failed">图片上传失败（%1$s）</string>
     <string name="menu_add_description">新增帖子菜单</string>

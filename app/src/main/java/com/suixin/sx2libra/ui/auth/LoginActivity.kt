@@ -70,16 +70,18 @@ class LoginActivity : AppCompatActivity() {
             LoginViewModel.Factory(initialUrl, sessionRepository, routePolicy),
         )[LoginViewModel::class.java]
 
-        factory = LibraWebViewFactory(routePolicy)
+        factory = LibraWebViewFactory(
+            routePolicy,
+            (application as LibraApplication).appContainer.webImageCache,
+        )
         // Reuse the view supplied by the layout while applying the same secure
         // settings/profile as all other page hosts.
         factory.configure(webView)
         themeDetector = WebThemeDetector(this, routePolicy) { theme ->
             themeObservation.report(theme)
         }
-        webView.webViewClient = LibraWebViewClient(
+        webView.webViewClient = factory.createClient(
             initialUrl,
-            routePolicy,
             object : LibraWebViewClientListener {
                 override fun onMainFrameNavigationRequested(
                     route: com.suixin.sx2libra.model.WebRoute,

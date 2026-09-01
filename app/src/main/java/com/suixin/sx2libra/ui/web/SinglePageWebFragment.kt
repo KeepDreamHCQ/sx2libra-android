@@ -74,6 +74,8 @@ class SinglePageWebFragment : Fragment() {
                 themeObservation?.report(theme)
             },
             actionController = actionController,
+            imageCache = (requireActivity().application as com.suixin.sx2libra.LibraApplication)
+                .appContainer.webImageCache,
         ).also { host ->
             container.addView(
                 host,

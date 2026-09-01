@@ -29,6 +29,7 @@ class LibraViewModelFactory(
                     container.forumMenuRepository,
                     savedStateHandle,
                     container.imageHostRepository,
+                    container.webImageCache,
                 ) as T
             else -> throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")
         }
@@ -47,6 +48,7 @@ class LibraViewModelFactory(
                     container.forumMenuRepository,
                     savedStateHandle,
                     container.imageHostRepository,
+                    container.webImageCache,
                 ) as T
             else -> throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")
         }

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputFilter
+import android.text.format.Formatter
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.EditText
@@ -58,6 +59,9 @@ class MenuSettingsActivity : AppCompatActivity() {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_URL)))
         }
         findViewById<View>(R.id.llVersion).setOnClickListener { checkForUpdate() }
+        findViewById<View>(R.id.image_cache_setting).setOnClickListener {
+            if (!viewModel.uiState.value.isClearingImageCache) showClearImageCacheDialog()
+        }
         findViewById<TextView>(R.id.tvVersion).text = currentVersionName()
 
         val list = findViewById<RecyclerView>(R.id.menu_list)
@@ -116,6 +120,9 @@ class MenuSettingsActivity : AppCompatActivity() {
     private fun render(state: MenuSettingsUiState) {
         if (adapter.currentMenus != state.menus) adapter.submitList(state.menus)
         findViewById<TextView>(R.id.image_host_value).text = state.selectedImageHost.displayName
+        findViewById<TextView>(R.id.image_cache_value).text =
+            Formatter.formatFileSize(this, state.imageCacheBytes.coerceAtLeast(0L))
+        findViewById<View>(R.id.image_cache_setting).isEnabled = !state.isClearingImageCache
         routeOptionAdapter?.submitRoutes(
             this,
             state.availableRoutes,
@@ -316,6 +323,17 @@ class MenuSettingsActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun showClearImageCacheDialog() {
+        MaterialAlertDialogBuilder(this, R.style.ThemeOverlay_Sx2libra_MaterialAlertDialog)
+            .setTitle(R.string.image_cache_clear_title)
+            .setMessage(R.string.image_cache_clear_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.image_cache_clear_confirm) { _, _ ->
+                viewModel.clearImageCache()
+            }
+            .show()
+    }
+
     private fun finishWithResult() {
         val state = viewModel.uiState.value
         val data = Intent().putExtra(EXTRA_REVISION, state.currentRevision)
@@ -331,6 +349,7 @@ class MenuSettingsActivity : AppCompatActivity() {
         MenuSettingsError.MENU_NOT_FOUND -> getString(R.string.menu_error_not_found)
         MenuSettingsError.LAST_MENU -> getString(R.string.menu_error_last)
         MenuSettingsError.INVALID_ORDER -> getString(R.string.menu_error_order)
+        MenuSettingsError.IMAGE_CACHE_STORAGE -> getString(R.string.image_cache_error_storage)
         MenuSettingsError.STORAGE -> getString(R.string.menu_error_storage)
     }
 

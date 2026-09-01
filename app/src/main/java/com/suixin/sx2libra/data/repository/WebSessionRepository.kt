@@ -33,6 +33,7 @@ interface WebSessionRepositoryContract {
 class WebSessionRepository(
     private val cookieDataSource: WebCookieDataSource,
     private val snapshotInvalidator: WebSnapshotInvalidator? = null,
+    private val imageCacheInvalidator: WebImageCacheInvalidator? = null,
 ) : WebSessionRepositoryContract {
     private val _authState = MutableStateFlow(AuthState.UNKNOWN)
 
@@ -49,6 +50,7 @@ class WebSessionRepository(
             UserNameStore.clear()
             UnreadMessageStore.clear()
             snapshotInvalidator?.invalidate()
+            imageCacheInvalidator?.invalidate()
         }
         return state
     }
@@ -69,6 +71,7 @@ class WebSessionRepository(
         // logout() is suspend, so wait until the private cache is cleared
         // before a later page can be rendered with the new session.
         snapshotInvalidator?.clear()
+        imageCacheInvalidator?.clear()
     }
 
     override fun markSessionExpired() {
@@ -77,6 +80,7 @@ class WebSessionRepository(
         UserNameStore.clear()
         UnreadMessageStore.clear()
         snapshotInvalidator?.invalidate()
+        imageCacheInvalidator?.invalidate()
     }
 
     /** Called by WebView page callbacks at the authenticated boundary. */

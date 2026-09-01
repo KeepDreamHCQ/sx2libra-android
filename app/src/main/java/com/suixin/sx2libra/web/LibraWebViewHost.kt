@@ -3,6 +3,7 @@ package com.suixin.sx2libra.web
 import android.os.Bundle
 import android.view.ViewGroup
 import android.webkit.WebView
+import com.suixin.sx2libra.data.repository.WebImageCacheRepositoryContract
 import com.suixin.sx2libra.ui.web.WebPageError
 import com.suixin.sx2libra.ui.web.WebPageViewModel
 
@@ -20,8 +21,9 @@ class LibraWebViewHost(
     messageListener: LibraWebMessageListener? = null,
     themeListener: LibraWebThemeListener? = null,
     private val actionController: NativeActionController? = null,
+    imageCache: WebImageCacheRepositoryContract,
 ) : LibraWebViewRefreshLayout(context) {
-    private val factory = LibraWebViewFactory(routePolicy)
+    private val factory = LibraWebViewFactory(routePolicy, imageCache)
     private val initialPageUrl = routePolicy.normalize(initialUrl)
         ?: throw IllegalArgumentException("initialUrl is not an allowed 2Libra page")
     private val webView: WebView = factory.create(
@@ -40,9 +42,8 @@ class LibraWebViewHost(
     init {
         bind(webView, routePolicy)
         actionController?.bind(webView)
-        webView.webViewClient = LibraWebViewClient(
+        webView.webViewClient = factory.createClient(
             initialPageUrl,
-            routePolicy,
             listenerWithRefreshCompletion(listener),
         )
         webView.webChromeClient = LibraWebChromeClient(

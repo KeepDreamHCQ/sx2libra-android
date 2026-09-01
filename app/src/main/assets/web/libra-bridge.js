@@ -16,6 +16,7 @@
   var POST_PAGE_CLASS = 'libra-post-page';
   var POST_LIST_PAGE_CLASS = 'libra-post-list-page';
   var POST_LIST_HEADER_CLASS = 'libra-post-list-header-hidden';
+  var LOGGED_OUT_HEADER_CLASS = 'libra-logged-out-header-hidden';
   var INLINE_PROFILE_TABS = ['about', 'post', 'comment', 'favorites', 'history'];
   var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   var uploadEventListeners = [];
@@ -755,6 +756,48 @@
     }
   }
 
+  function loggedOutHeader(loginLink) {
+    var ancestor = loginLink;
+    while (ancestor && ancestor !== document.body) {
+      var classes = ancestor.classList;
+      if (ancestor.tagName === 'DIV' && classes &&
+          classes.contains('flex') && classes.contains('items-center') &&
+          classes.contains('gap-0.5') &&
+          ancestor.querySelector('a[href="/auth/signup"]') &&
+          ancestor.querySelector('details.dropdown')) {
+        return ancestor;
+      }
+      ancestor = ancestor.parentElement;
+    }
+    return null;
+  }
+
+  function updateLoggedOutHeaderVisibility() {
+    var root = document.documentElement;
+    if (!root) return;
+
+    var matchingHeaders = [];
+    var loginLinks = document.querySelectorAll('a[href="/auth/login"]');
+    for (var i = 0; i < loginLinks.length; i++) {
+      var header = loggedOutHeader(loginLinks[i]);
+      if (header && matchingHeaders.indexOf(header) < 0) {
+        matchingHeaders.push(header);
+      }
+    }
+
+    var hiddenHeaders = document.querySelectorAll('.' + LOGGED_OUT_HEADER_CLASS);
+    for (var j = 0; j < hiddenHeaders.length; j++) {
+      if (matchingHeaders.indexOf(hiddenHeaders[j]) < 0) {
+        hiddenHeaders[j].classList.remove(LOGGED_OUT_HEADER_CLASS);
+      }
+    }
+    for (var k = 0; k < matchingHeaders.length; k++) {
+      if (!matchingHeaders[k].classList.contains(LOGGED_OUT_HEADER_CLASS)) {
+        matchingHeaders[k].classList.add(LOGGED_OUT_HEADER_CLASS);
+      }
+    }
+  }
+
   function updatePostNavbarVisibility() {
     var root = document.documentElement;
     if (!root) return;
@@ -779,11 +822,14 @@
         'html.' + POST_LIST_PAGE_CLASS + ' .' + POST_LIST_HEADER_CLASS + ' {' +
         'display: none !important; height: 0 !important; min-height: 0 !important;' +
         'padding: 0 !important; margin: 0 !important; border: 0 !important;' +
-        'overflow: hidden !important;}';
+        'overflow: hidden !important;}' +
+        '.' + LOGGED_OUT_HEADER_CLASS + ' {' +
+        'display: none !important;}';
       (document.head || root).appendChild(style);
     }
     root.classList.toggle(POST_PAGE_CLASS, isPostPage());
     updatePostListHeaderVisibility();
+    updateLoggedOutHeaderVisibility();
   }
 
   function alignOpenUserMenu() {

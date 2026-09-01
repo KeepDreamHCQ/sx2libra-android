@@ -80,7 +80,10 @@ open class WebPageActivity : AppCompatActivity() {
             WebPageViewModel.Factory(initialUrl, routePolicy, sessionRepository),
         )[WebPageViewModel::class.java]
 
-        webViewFactory = LibraWebViewFactory(routePolicy)
+        webViewFactory = LibraWebViewFactory(
+            routePolicy,
+            (application as LibraApplication).appContainer.webImageCache,
+        )
         webViewFactory.configure(webView)
         nativeActionController = NativeActionControllerRegistry.create(
             activity = this,
@@ -101,9 +104,8 @@ open class WebPageActivity : AppCompatActivity() {
             nativeActionController.messageListener(),
             LibraWebThemeListener { _, theme -> themeObservation.report(theme) },
         )
-        webView.webViewClient = LibraWebViewClient(
+        webView.webViewClient = webViewFactory.createClient(
             initialUrl,
-            routePolicy,
             object : LibraWebViewClientListener {
                 override fun onMainFrameNavigationRequested(
                     route: WebRoute,

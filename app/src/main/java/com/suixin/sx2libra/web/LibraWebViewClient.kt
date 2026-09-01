@@ -4,8 +4,10 @@ import android.net.http.SslError
 import android.webkit.SslErrorHandler
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.suixin.sx2libra.data.repository.WebImageCacheRepositoryContract
 import com.suixin.sx2libra.model.WebRoute
 
 /** Callbacks converted by the Activity into ViewModel value-object intents. */
@@ -41,7 +43,10 @@ class LibraWebViewClient(
     private val routePolicy: RoutePolicy = RoutePolicy(),
     private val listener: LibraWebViewClientListener,
     private val allowLoginFlowNavigation: Boolean = false,
+    imageCache: WebImageCacheRepositoryContract? = null,
 ) : WebViewClient() {
+    private val imageResourceInterceptor = imageCache?.let(::WebImageResourceInterceptor)
+
     init {
         require(routePolicy.isAllowedPageUrl(initialUrl)) {
             "initialUrl must be an allowed 2Libra page"
@@ -91,6 +96,12 @@ class LibraWebViewClient(
         listener.onMainFrameNavigationRequested(route, isRedirect = false, hasUserGesture = true)
         return true
     }
+
+    override fun shouldInterceptRequest(
+        view: WebView,
+        request: WebResourceRequest,
+    ): WebResourceResponse? = imageResourceInterceptor?.intercept(request)
+        ?: super.shouldInterceptRequest(view, request)
 
     override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
         listener.onPageStarted(url)

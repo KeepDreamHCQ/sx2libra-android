@@ -99,6 +99,8 @@ class ForumMenuPageFragment : Fragment() {
                 themeObservation?.report(theme)
             },
             actionController = actionController,
+            imageCache = (requireActivity().application as LibraApplication)
+                .appContainer.webImageCache,
         ).also { host ->
             hostContainer.addView(
                 host,

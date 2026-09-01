@@ -11,6 +11,7 @@ import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import com.suixin.sx2libra.data.repository.WebImageCacheRepositoryContract
 import com.suixin.sx2libra.model.AuthContract
 import com.suixin.sx2libra.model.WebTheme
 import androidx.core.content.ContextCompat
@@ -40,6 +41,7 @@ fun interface LibraWebThemeListener {
  */
 class LibraWebViewFactory(
     private val routePolicy: RoutePolicy = RoutePolicy(),
+    private val imageCache: WebImageCacheRepositoryContract? = null,
 ) {
     fun create(
         context: Context,
@@ -87,6 +89,18 @@ class LibraWebViewFactory(
             android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
         WebView.setWebContentsDebuggingEnabled(isDebuggable)
     }
+
+    fun createClient(
+        initialUrl: String,
+        listener: LibraWebViewClientListener,
+        allowLoginFlowNavigation: Boolean = false,
+    ): LibraWebViewClient = LibraWebViewClient(
+        initialUrl = initialUrl,
+        routePolicy = routePolicy,
+        listener = listener,
+        allowLoginFlowNavigation = allowLoginFlowNavigation,
+        imageCache = imageCache,
+    )
 
     /**
      * Installs document-start navigation interception and the restricted

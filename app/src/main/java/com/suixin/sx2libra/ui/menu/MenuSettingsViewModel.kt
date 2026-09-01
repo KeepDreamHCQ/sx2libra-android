@@ -8,6 +8,7 @@ import com.suixin.sx2libra.data.repository.ForumMenuError
 import com.suixin.sx2libra.data.repository.ForumMenuRepository
 import com.suixin.sx2libra.data.repository.ForumMenuRepositoryException
 import com.suixin.sx2libra.data.repository.ImageHostRepository
+import com.suixin.sx2libra.data.repository.WebImageCacheRepositoryContract
 import com.suixin.sx2libra.model.ForumMenu
 import com.suixin.sx2libra.model.ImageHost
 import com.suixin.sx2libra.model.SiteRoute
@@ -20,6 +21,7 @@ class MenuSettingsViewModel(
     private val menuRepository: ForumMenuRepository,
     private val savedStateHandle: SavedStateHandle,
     private val imageHostRepository: ImageHostRepository,
+    private val imageCacheRepository: WebImageCacheRepositoryContract,
 ) : ViewModel() {
     private val siteRoutes: List<SiteRoute> = SiteRouteCatalog.routes
     private val startConfig = menuRepository.currentConfig()
@@ -73,6 +75,13 @@ class MenuSettingsViewModel(
                 )
             }
         }
+        viewModelScope.launch {
+            imageCacheRepository.sizeBytes.collect { bytes ->
+                _uiState.value = _uiState.value.copy(
+                    imageCacheBytes = bytes,
+                )
+            }
+        }
     }
 
     fun selectImageHost(host: ImageHost) {
@@ -81,6 +90,19 @@ class MenuSettingsViewModel(
             _uiState.value = _uiState.value.copy(error = null)
         } else {
             setError(MenuSettingsError.STORAGE)
+        }
+    }
+
+    fun clearImageCache() {
+        if (_uiState.value.isClearingImageCache) return
+        _uiState.value = _uiState.value.copy(
+            isClearingImageCache = true,
+            error = null,
+        )
+        viewModelScope.launch {
+            val result = runCatching { imageCacheRepository.clear() }
+            _uiState.value = _uiState.value.copy(isClearingImageCache = false)
+            if (result.isFailure) setError(MenuSettingsError.IMAGE_CACHE_STORAGE)
         }
     }
 

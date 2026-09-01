@@ -24,7 +24,8 @@ class WebSessionRepositoryTest {
     fun logoutClearsAndFlushesWithoutExposingCookieValues() = runBlocking {
         val source = FakeCookieSource(AuthState.LOGGED_IN)
         val snapshots = FakeSnapshotInvalidator()
-        val repository = WebSessionRepository(source, snapshots)
+        val images = FakeImageCacheInvalidator()
+        val repository = WebSessionRepository(source, snapshots, images)
 
         repository.logout()
 
@@ -32,16 +33,23 @@ class WebSessionRepositoryTest {
         assertTrue(source.cleared)
         assertEquals(1, source.flushCount)
         assertTrue(snapshots.cleared)
+        assertTrue(images.cleared)
     }
 
     @Test
     fun sessionExpiryInvalidatesSnapshotsImmediately() {
         val snapshots = FakeSnapshotInvalidator()
-        val repository = WebSessionRepository(FakeCookieSource(AuthState.LOGGED_IN), snapshots)
+        val images = FakeImageCacheInvalidator()
+        val repository = WebSessionRepository(
+            FakeCookieSource(AuthState.LOGGED_IN),
+            snapshots,
+            images,
+        )
 
         repository.markSessionExpired()
 
         assertTrue(snapshots.invalidated)
+        assertTrue(images.invalidated)
     }
 
     @Test
@@ -66,6 +74,14 @@ class WebSessionRepositoryTest {
     }
 
     private class FakeSnapshotInvalidator : WebSnapshotInvalidator {
+        var invalidated = false
+        var cleared = false
+
+        override fun invalidate() { invalidated = true }
+        override suspend fun clear() { cleared = true }
+    }
+
+    private class FakeImageCacheInvalidator : WebImageCacheInvalidator {
         var invalidated = false
         var cleared = false
 

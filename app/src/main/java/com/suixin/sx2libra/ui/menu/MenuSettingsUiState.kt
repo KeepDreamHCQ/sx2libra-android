@@ -12,6 +12,7 @@ enum class MenuSettingsError {
     MENU_NOT_FOUND,
     LAST_MENU,
     INVALID_ORDER,
+    IMAGE_CACHE_STORAGE,
     STORAGE
 }
 
@@ -29,6 +30,8 @@ data class MenuSettingsUiState(
     val pendingDelete: PendingDelete? = null,
     val availableRoutes: List<SiteRoute> = emptyList(),
     val selectedImageHost: ImageHost = ImageHost.TIKOLU,
+    val imageCacheBytes: Long = 0L,
+    val isClearingImageCache: Boolean = false,
     val error: MenuSettingsError? = null,
     val isLoading: Boolean = true
 ) {
